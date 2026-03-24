@@ -1,0 +1,31 @@
+{
+  "name": "gh-pr-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Review GitHub pull requests with Claude on Azure Foundry.",
+  "type": "module",
+  "bin": {
+    "gh-pr-review": "./dist/src/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && mkdir -p dist/prompts && cp prompts/*.md dist/prompts/",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.0",
+    "commander": "^14.0.0",
+    "node-fetch": "^3.3.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.1"
+  }
+}
