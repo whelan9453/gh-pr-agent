@@ -16,9 +16,11 @@ function findGhPrAgentDir(): string {
 }
 
 function sessionsDir(): string {
-  const dir = path.join(findGhPrAgentDir(), "sessions");
-  mkdirSync(dir, { recursive: true });
-  return dir;
+  return path.join(findGhPrAgentDir(), "sessions");
+}
+
+function ensureSessionsDir(): void {
+  mkdirSync(sessionsDir(), { recursive: true });
 }
 
 export function generateSessionId(): string {
@@ -34,6 +36,7 @@ export function artifactsPath(id: string): string {
 }
 
 export function saveSession(session: AppSession): void {
+  ensureSessionsDir();
   writeFileSync(sessionPath(session.id), JSON.stringify(session, null, 2), "utf8");
 }
 
@@ -46,6 +49,7 @@ export function loadSession(id: string): AppSession {
 }
 
 export function saveArtifacts(sessionId: string, artifacts: SessionArtifacts): void {
+  ensureSessionsDir();
   writeFileSync(artifactsPath(sessionId), JSON.stringify(artifacts, null, 2), "utf8");
 }
 

@@ -1,4 +1,6 @@
 import readline from "node:readline";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { loadPrompt } from "./prompt-loader.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
 import { ClaudeFoundryClient } from "./model-client.js";
@@ -23,8 +25,9 @@ import type {
   ConversationMessage,
   SessionMode
 } from "./types.js";
-import { resolveConfig } from "./config.js";
 import type { ModelPreset } from "./config.js";
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
 function writeProgress(msg: string): void {
   process.stderr.write(`${msg}\n`);
@@ -115,8 +118,7 @@ export async function createReviewSession(
 
   // Run full ReviewEngine precompute
   writeProgress("Running precompute review (this may take a moment)...");
-  const reviewPromptPath = await resolveDefaultReviewPromptPath();
-  const reviewPrompt = await loadPrompt(reviewPromptPath);
+  const reviewPrompt = await loadPrompt(resolvePromptPath("review_prompt.md"));
 
   const foundryClient = new ClaudeFoundryClient(
     opts.azureFoundryBaseUrl,
@@ -127,7 +129,7 @@ export async function createReviewSession(
 
   const engine = new ReviewEngine(github, foundryClient, reviewPrompt, {
     onProgress: writeProgress,
-    ...(opts.verbose !== undefined ? { verbose: opts.verbose } : {})
+    verbose: opts.verbose ?? false
   });
 
   const reviewReport = await engine.reviewPullRequest(pr);
@@ -175,12 +177,8 @@ export async function createReviewSession(
   return session;
 }
 
-async function resolveDefaultReviewPromptPath(): Promise<string> {
-  const { fileURLToPath } = await import("node:url");
-  const { dirname } = await import("node:path");
-  const url = import.meta.url;
-  const dir = dirname(fileURLToPath(url));
-  return `${dir}/../prompts/review_prompt.md`;
+function resolvePromptPath(name: string): string {
+  return join(MODULE_DIR, "..", "prompts", name);
 }
 
 // ── Cursor helpers ─────────────────────────────────────────────────────────
@@ -389,8 +387,9 @@ function buildInitialWalkthroughMessage(
   const { prInfo, walkthroughOrder, files } = artifacts;
   const tree = buildAsciiTree(walkthroughOrder);
 
+  const fileMap = new Map(files.map((f) => [f.path, f]));
   const fileTableRows = walkthroughOrder.map((p, i) => {
-    const f = files.find((f) => f.path === p);
+    const f = fileMap.get(p);
     return `${i + 1}. ${p} (${f?.status ?? "??"}, +${f?.additions ?? 0}/-${f?.deletions ?? 0})`;
   });
 
@@ -512,7 +511,7 @@ export async function runSessionRepl(
   );
 
   // Load prompt for system prompt
-  const promptPath = opts.promptFile ?? (await resolveSessionPromptPath(session.mode));
+  const promptPath = opts.promptFile ?? resolveSessionPromptPath(session.mode);
   const promptContent = await loadPrompt(promptPath);
 
   printSessionHeader(session);
@@ -542,7 +541,7 @@ export async function runSessionRepl(
     saveSession(session);
   } else {
     // Resuming: show last assistant message as context
-    const lastAssistant = [...session.messages].reverse().find((m) => m.role === "assistant");
+    const lastAssistant = session.messages.findLast((m) => m.role === "assistant");
     if (lastAssistant) {
       writeLine("(resuming session — last response:)\n");
       writeLine(lastAssistant.content + "\n");
@@ -675,12 +674,8 @@ export async function runSessionRepl(
   }
 }
 
-async function resolveSessionPromptPath(mode: SessionMode): Promise<string> {
-  const { fileURLToPath } = await import("node:url");
-  const { dirname, join } = await import("node:path");
-  const dir = dirname(fileURLToPath(import.meta.url));
-  if (mode === "walkthrough") {
-    return join(dir, "..", "prompts", "branch-diff-walkthrough.md");
-  }
-  return join(dir, "..", "prompts", "review_chat.md");
+function resolveSessionPromptPath(mode: SessionMode): string {
+  return resolvePromptPath(
+    mode === "walkthrough" ? "branch-diff-walkthrough.md" : "review_chat.md"
+  );
 }
