@@ -3,8 +3,6 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadPrompt } from "./prompt-loader.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
-import { ClaudeFoundryClient } from "./model-client.js";
-import { ReviewEngine } from "./review-engine.js";
 import { buildNumberedPatch } from "./diff-line-mapper.js";
 import { FoundryConversationClient } from "./conversation-client.js";
 import { parseCommand } from "./command-parser.js";
@@ -22,9 +20,7 @@ import type {
   FileMaterial,
   PrContext,
   WalkthroughCursor,
-  ReviewCursor,
-  ConversationMessage,
-  SessionMode
+  ConversationMessage
 } from "./types.js";
 import type { ModelPreset } from "./config.js";
 
@@ -117,123 +113,12 @@ export async function createWalkthroughSession(
   return session;
 }
 
-export async function createReviewSession(
-  prUrl: string,
-  opts: InteractiveOptions
-): Promise<AppSession> {
-  const pr = parsePullRequestUrl(prUrl);
-  const github = new GitHubClient(opts.githubToken, pr.apiBaseUrl);
-
-  writeProgress("Fetching PR metadata and comments...");
-  const reviewPrompt = await loadPrompt(resolvePromptPath("review_prompt.md"));
-  const foundryClient = new ClaudeFoundryClient(
-    opts.azureFoundryBaseUrl,
-    opts.azureFoundryApiKey,
-    opts.deploymentName,
-    opts.verbose ? { onVerbose: writeProgress } : undefined
-  );
-  const engine = new ReviewEngine(github, foundryClient, reviewPrompt, {
-    onProgress: writeProgress,
-    verbose: opts.verbose ?? false
-  });
-
-  // Fetch PR info, comments, and run precompute all in parallel
-  const [reviewReport, prInfo, issueComments, reviews, reviewComments] = await Promise.all([
-    engine.reviewPullRequest(pr).then((report) => {
-      writeProgress("Precompute complete.");
-      return report;
-    }),
-    github.getPullRequest(pr),
-    github.listIssueComments(pr),
-    github.listReviews(pr),
-    github.listReviewComments(pr)
-  ]);
-  writeProgress(`${reviews.length} review(s), ${issueComments.length + reviewComments.length} comment(s) loaded.`);
-
-  const prContext: PrContext = {
-    description: prInfo.body,
-    issueComments,
-    reviews,
-    reviewComments
-  };
-
-  const files: FileMaterial[] = reviewReport.files.map((f) => ({
-    path: f.path,
-    status: f.status,
-    additions: 0,
-    deletions: 0,
-    numberedPatch: null
-  }));
-
-  const walkthroughOrder = buildWalkthroughOrder(files.map((f) => f.path));
-  const artifacts: SessionArtifacts = { prInfo, prContext, files, walkthroughOrder, reviewReport };
-
-  const id = generateSessionId();
-  const now = new Date().toISOString();
-
-  // Start cursor at first file with content
-  const firstFileIndex = findNextReviewFile(reviewReport.files, -1);
-
-  const cursor: ReviewCursor = {
-    mode: "review",
-    fileIndex: Math.max(0, firstFileIndex),
-    issueIndex: -1
-  };
-
-  const session: AppSession = {
-    id,
-    mode: "review",
-    prRef: pr,
-    model: opts.model,
-    prTitle: prInfo.title,
-    snapshotSha: prInfo.headSha,
-    createdAt: now,
-    updatedAt: now,
-    cursor,
-    messages: []
-  };
-
-  saveArtifacts(id, artifacts);
-  saveSession(session);
-
-  return session;
-}
 
 function resolvePromptPath(name: string): string {
   return join(MODULE_DIR, "..", "prompts", name);
 }
 
 // ── Cursor helpers ─────────────────────────────────────────────────────────
-
-function findNextReviewFile(
-  files: NonNullable<SessionArtifacts["reviewReport"]>["files"],
-  currentIndex: number
-): number {
-  for (let i = currentIndex + 1; i < files.length; i++) {
-    const f = files[i];
-    if (!f) continue;
-    if (!f.skipped && !f.reviewFailed && (f.issues.length > 0 || f.summary.length > 0)) {
-      return i;
-    }
-  }
-  // If no file with content found, just go to next file
-  return Math.min(currentIndex + 1, files.length - 1);
-}
-
-function advanceReviewCursor(cursor: ReviewCursor, artifacts: SessionArtifacts): ReviewCursor {
-  const report = artifacts.reviewReport;
-  if (!report) return cursor;
-
-  const currentFile = report.files[cursor.fileIndex];
-  const hasIssues = currentFile && currentFile.issues.length > 0;
-
-  if (hasIssues && cursor.issueIndex < (currentFile?.issues.length ?? 0) - 1) {
-    return { ...cursor, issueIndex: cursor.issueIndex + 1 };
-  }
-
-  const nextFileIndex = findNextReviewFile(report.files, cursor.fileIndex);
-  return { ...cursor, fileIndex: nextFileIndex, issueIndex: -1 };
-}
 
 function advanceWalkthroughCursor(cursor: WalkthroughCursor): WalkthroughCursor {
   const next = Math.min(cursor.fileIndex + 1, cursor.walkthroughOrder.length - 1);
@@ -246,20 +131,6 @@ function jumpWalkthroughCursor(cursor: WalkthroughCursor, filePath: string): Wal
   );
   if (index < 0) return cursor;
   return { ...cursor, fileIndex: index };
-}
-
-function jumpReviewCursor(
-  cursor: ReviewCursor,
-  artifacts: SessionArtifacts,
-  filePath: string
-): ReviewCursor {
-  const report = artifacts.reviewReport;
-  if (!report) return cursor;
-  const index = report.files.findIndex(
-    (f) => f.path === filePath || f.path.endsWith(filePath) || filePath.endsWith(f.path)
-  );
-  if (index < 0) return cursor;
-  return { ...cursor, fileIndex: index, issueIndex: -1 };
 }
 
 // ── PR context block ───────────────────────────────────────────────────────
@@ -297,7 +168,9 @@ function buildPrContextBlock(prContext: PrContext): string {
     }
   }
 
-  return parts.join("\n");
+  if (parts.length === 0) return "";
+
+  return ["## PR Discussion", "", ...parts].join("\n");
 }
 
 // ── Context builders ───────────────────────────────────────────────────────
@@ -340,36 +213,6 @@ function buildWalkthroughSystemPrompt(
   ].join("\n");
 }
 
-function buildReviewSystemPrompt(
-  session: AppSession,
-  artifacts: SessionArtifacts,
-  promptContent: string
-): string {
-  const c = session.cursor as ReviewCursor;
-  const report = artifacts.reviewReport;
-  const currentFile = report?.files[c.fileIndex];
-  const total = report?.files.length ?? 0;
-
-  return [
-    promptContent,
-    "",
-    "---",
-    `Session: ${session.id}`,
-    `Mode: interactive review`,
-    `PR: ${session.prRef.owner}/${session.prRef.repo}#${session.prRef.number} — ${session.prTitle}`,
-    `Branch: ${artifacts.prInfo.base} → ${artifacts.prInfo.head}`,
-    `Current position: file ${c.fileIndex + 1}/${total}${currentFile ? ` — ${currentFile.path}` : ""}${c.issueIndex >= 0 ? `, issue ${c.issueIndex + 1}/${currentFile?.issues.length ?? 0}` : ""}`,
-    "",
-    "You are presenting a precomputed structured review. Present findings from the ReviewReport.",
-    "For files marked reviewFailed or skipped, acknowledge the failure — do NOT invent analysis.",
-    "",
-    "Available commands:",
-    "  next — advance to next issue or next file",
-    "  jump <file-path> — jump to specific file",
-    "  status — show current position",
-    "  exit — end session"
-  ].join("\n");
-}
 
 function buildFileMaterialBlock(filePath: string, artifacts: SessionArtifacts): string {
   const file = artifacts.files.find((f) => f.path === filePath);
@@ -390,55 +233,6 @@ function buildFileMaterialBlock(filePath: string, artifacts: SessionArtifacts): 
   return parts.join("\n");
 }
 
-function buildReviewFileMaterialBlock(
-  fileIndex: number,
-  issueIndex: number,
-  artifacts: SessionArtifacts
-): string {
-  const report = artifacts.reviewReport;
-  if (!report) return "(No review report available)";
-
-  const file = report.files[fileIndex];
-  if (!file) return "(File not found in report)";
-
-  const parts = [`File: ${file.path}`, `Status: ${file.status}`];
-
-  if (file.skipped) {
-    parts.push(`Skipped: ${file.skipReason ?? "no reason"}`);
-    return parts.join("\n");
-  }
-
-  if (file.reviewFailed) {
-    parts.push(`Review failed: ${file.reviewFailureReason ?? "unknown error"}`);
-    return parts.join("\n");
-  }
-
-  if (file.summary.length > 0) {
-    parts.push("", "Summary:", ...file.summary.map((s) => `• ${s}`));
-  }
-
-  if (issueIndex >= 0 && issueIndex < file.issues.length) {
-    const issue = file.issues[issueIndex];
-    if (issue) {
-      parts.push(
-        "",
-        `Issue ${issueIndex + 1}/${file.issues.length}: ${issue.title}`,
-        `Severity: ${issue.severity}  Confidence: ${issue.confidence}${issue.line ? `  Line: ${issue.line}` : ""}`,
-        "",
-        issue.details
-      );
-    }
-  } else if (file.issues.length > 0) {
-    parts.push("", `Issues (${file.issues.length} total):`);
-    for (const [i, issue] of file.issues.entries()) {
-      parts.push(
-        `  ${i + 1}. [${issue.severity}] ${issue.title}${issue.line ? ` (line ${issue.line})` : ""}`
-      );
-    }
-  }
-
-  return parts.join("\n");
-}
 
 function buildInitialWalkthroughMessage(
   session: AppSession,
@@ -481,38 +275,6 @@ function buildInitialWalkthroughMessage(
   ].join("\n");
 }
 
-function buildInitialReviewMessage(session: AppSession, artifacts: SessionArtifacts): string {
-  const report = artifacts.reviewReport;
-  if (!report) return "No review report available.";
-
-  const c = session.cursor as ReviewCursor;
-  const fileLines = report.files.map((f, i) => {
-    if (f.skipped) return `  ${i + 1}. ${f.path} — SKIPPED`;
-    if (f.reviewFailed) return `  ${i + 1}. ${f.path} — REVIEW FAILED`;
-    return `  ${i + 1}. ${f.path} — ${f.issues.length} issue(s)`;
-  });
-
-  const currentFile = report.files[c.fileIndex];
-  const currentMaterial = buildReviewFileMaterialBlock(c.fileIndex, c.issueIndex, artifacts);
-
-  const prContextBlock = buildPrContextBlock(artifacts.prContext);
-
-  return [
-    `Begin interactive review for PR #${session.prRef.number}: ${session.prTitle}`,
-    "",
-    `Author: ${artifacts.prInfo.author}`,
-    `Base: ${artifacts.prInfo.base} → ${artifacts.prInfo.head}`,
-    `Summary: ${report.overallSummary}`,
-    ...(prContextBlock ? ["", prContextBlock] : []),
-    "",
-    "Files:",
-    ...fileLines,
-    "",
-    `Starting with file ${c.fileIndex + 1}/${report.files.length}: ${currentFile?.path ?? "(none)"}`,
-    "",
-    currentMaterial
-  ].join("\n");
-}
 
 // ── Status display ─────────────────────────────────────────────────────────
 
@@ -523,23 +285,13 @@ function printStatus(session: AppSession, artifacts: SessionArtifacts): void {
   );
   writeLine(`Snapshot: ${session.snapshotSha}`);
 
-  if (session.cursor.mode === "walkthrough") {
-    const c = session.cursor;
-    const total = c.walkthroughOrder.length;
-    writeLine(`Progress: file ${c.fileIndex + 1}/${total}`);
-    writeLine("");
-    for (const [i, p] of c.walkthroughOrder.entries()) {
-      const marker = i < c.fileIndex ? "[x]" : i === c.fileIndex ? "[>]" : "[ ]";
-      writeLine(`  ${marker} ${p}`);
-    }
-  } else {
-    const c = session.cursor as ReviewCursor;
-    const report = artifacts.reviewReport;
-    const total = report?.files.length ?? 0;
-    const currentFile = report?.files[c.fileIndex];
-    writeLine(
-      `Progress: file ${c.fileIndex + 1}/${total} — ${currentFile?.path ?? "?"}${c.issueIndex >= 0 ? `, issue ${c.issueIndex + 1}/${currentFile?.issues.length ?? 0}` : ""}`
-    );
+  const c = session.cursor;
+  const total = c.walkthroughOrder.length;
+  writeLine(`Progress: file ${c.fileIndex + 1}/${total}`);
+  writeLine("");
+  for (const [i, p] of c.walkthroughOrder.entries()) {
+    const marker = i < c.fileIndex ? "[x]" : i === c.fileIndex ? "[>]" : "[ ]";
+    writeLine(`  ${marker} ${p}`);
   }
 
   writeLine(`\nCommands: next | jump <path> | status | exit\n`);
@@ -577,24 +329,18 @@ export async function runSessionRepl(
   );
 
   // Load prompt for system prompt
-  const promptPath = opts.promptFile ?? resolveSessionPromptPath(session.mode);
+  const promptPath = opts.promptFile ?? resolveSessionPromptPath();
   const promptContent = await loadPrompt(promptPath);
 
   printSessionHeader(session);
 
   // If new session, generate first response
   if (isNew) {
-    const initMessage =
-      session.mode === "walkthrough"
-        ? buildInitialWalkthroughMessage(session, artifacts)
-        : buildInitialReviewMessage(session, artifacts);
+    const initMessage = buildInitialWalkthroughMessage(session, artifacts);
 
     writeProgress("Generating initial overview...");
 
-    const systemPrompt =
-      session.mode === "walkthrough"
-        ? buildWalkthroughSystemPrompt(session, artifacts, promptContent)
-        : buildReviewSystemPrompt(session, artifacts, promptContent);
+    const systemPrompt = buildWalkthroughSystemPrompt(session, artifacts, promptContent);
 
     const callMessages: ConversationMessage[] = [{ role: "user", content: initMessage }];
     const response = await convClient.send(systemPrompt, callMessages);
@@ -646,78 +392,38 @@ export async function runSessionRepl(
     if (cmd.type === "next" || cmd.type === "jump" || cmd.type === "followup") {
       // Update cursor for next/jump
       if (cmd.type === "next") {
-        if (session.cursor.mode === "walkthrough") {
-          const c = session.cursor as WalkthroughCursor;
-          if (c.fileIndex >= c.walkthroughOrder.length - 1) {
-            writeLine("(already at last file)");
-            prompt();
-            continue;
-          }
-          session.cursor = advanceWalkthroughCursor(c);
-        } else {
-          session.cursor = advanceReviewCursor(session.cursor as ReviewCursor, artifacts);
+        const c = session.cursor;
+        if (c.fileIndex >= c.walkthroughOrder.length - 1) {
+          writeLine("(already at last file)");
+          prompt();
+          continue;
         }
+        session.cursor = advanceWalkthroughCursor(c);
       }
 
       if (cmd.type === "jump") {
-        if (session.cursor.mode === "walkthrough") {
-          const newCursor = jumpWalkthroughCursor(
-            session.cursor as WalkthroughCursor,
-            cmd.filePath
-          );
-          if (
-            newCursor.fileIndex === (session.cursor as WalkthroughCursor).fileIndex
-          ) {
-            writeLine(`(file not found in walkthrough order: ${cmd.filePath})`);
-            prompt();
-            continue;
-          }
-          session.cursor = newCursor;
-        } else {
-          const newCursor = jumpReviewCursor(
-            session.cursor as ReviewCursor,
-            artifacts,
-            cmd.filePath
-          );
-          if (newCursor.fileIndex === (session.cursor as ReviewCursor).fileIndex) {
-            writeLine(`(file not found: ${cmd.filePath})`);
-            prompt();
-            continue;
-          }
-          session.cursor = newCursor;
+        const newCursor = jumpWalkthroughCursor(session.cursor, cmd.filePath);
+        if (newCursor.fileIndex === session.cursor.fileIndex) {
+          writeLine(`(file not found in walkthrough order: ${cmd.filePath})`);
+          prompt();
+          continue;
         }
+        session.cursor = newCursor;
       }
 
       // Build context-injected user message for the model
-      let contextBlock: string;
-      let userText: string;
-
-      if (session.cursor.mode === "walkthrough") {
-        const c = session.cursor as WalkthroughCursor;
-        const currentPath = c.walkthroughOrder[c.fileIndex] ?? "";
-        contextBlock = buildFileMaterialBlock(currentPath, artifacts);
-        userText =
-          cmd.type === "followup"
-            ? cmd.text
-            : cmd.type === "jump"
-              ? `[jump to file ${c.fileIndex + 1}/${c.walkthroughOrder.length}: ${currentPath}]`
-              : `[next: file ${c.fileIndex + 1}/${c.walkthroughOrder.length}: ${currentPath}]`;
-      } else {
-        const c = session.cursor as ReviewCursor;
-        contextBlock = buildReviewFileMaterialBlock(c.fileIndex, c.issueIndex, artifacts);
-        userText =
-          cmd.type === "followup"
-            ? cmd.text
-            : cmd.type === "jump"
-              ? `[jump to file ${c.fileIndex + 1}]`
-              : `[next]`;
-      }
+      const c = session.cursor;
+      const currentPath = c.walkthroughOrder[c.fileIndex] ?? "";
+      const contextBlock = buildFileMaterialBlock(currentPath, artifacts);
+      const userText =
+        cmd.type === "followup"
+          ? cmd.text
+          : cmd.type === "jump"
+            ? `[jump to file ${c.fileIndex + 1}/${c.walkthroughOrder.length}: ${currentPath}]`
+            : `[next: file ${c.fileIndex + 1}/${c.walkthroughOrder.length}: ${currentPath}]`;
 
       const contextualMessage = `${contextBlock}\n\n${userText}`;
-      const systemPrompt =
-        session.cursor.mode === "walkthrough"
-          ? buildWalkthroughSystemPrompt(session, artifacts, promptContent)
-          : buildReviewSystemPrompt(session, artifacts, promptContent);
+      const systemPrompt = buildWalkthroughSystemPrompt(session, artifacts, promptContent);
 
       const callMessages: ConversationMessage[] = [
         ...session.messages,
@@ -740,8 +446,6 @@ export async function runSessionRepl(
   }
 }
 
-function resolveSessionPromptPath(mode: SessionMode): string {
-  return resolvePromptPath(
-    mode === "walkthrough" ? "branch-diff-walkthrough.md" : "review_chat.md"
-  );
+function resolveSessionPromptPath(): string {
+  return resolvePromptPath("branch-diff-walkthrough.md");
 }

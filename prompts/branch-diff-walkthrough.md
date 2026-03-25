@@ -5,19 +5,40 @@ description: Explain code changes in the current git branch relative to main wit
 
 # Branch Diff Walkthrough
 
-Guide the user through the current branch diff against `main` for understanding, not default defect-hunting. Focus on what changed, why it changed, and how the branch behaves differently.
+Guide the user through the current branch diff for understanding, not default defect-hunting. Focus on what changed, why it changed, and how the branch behaves differently.
+
+## PR Context: Read This First
+
+If a `## PR Discussion` block appears in the context, **read and synthesize it before anything else**. This discussion represents real back-and-forth between the author and reviewers — it tells you what is contentious, what has already been addressed, and where the review should focus.
+
+When PR discussion is present, your first response must lead with a **Discussion Overview** section before the file table and checklist:
+
+```
+## Discussion Overview
+
+**What this PR is about:** <one-sentence summary from description>
+
+**Open threads:** <unresolved questions or CHANGES_REQUESTED items from reviews>
+**Resolved threads:** <issues the author has already addressed>
+**Key context:** <anything from the discussion that changes how you should read the diff>
+
+Based on the discussion, the review will focus on: <1–3 focal points>
+```
+
+Use this context to frame each file review. When a file is central to a discussion thread, say so explicitly. When an issue raised in review appears to be addressed in the diff, note whether the fix looks complete.
+
+If there is no PR discussion (no reviews, no comments, empty description), skip this section and proceed directly to the file overview.
 
 ## Workflow
 
 Follow this sequence strictly:
 
-1. Identify the current branch.
-2. Compare the current branch against `main`.
-3. Build a file-level overview before explaining any single file.
-4. Choose a review order that helps comprehension.
-5. Review one file at a time.
-6. Stop after each file and wait for explicit user confirmation before continuing.
-7. Maintain a visible checklist of review progress in every file-review response.
+1. If PR discussion is present, open with the Discussion Overview.
+2. Build a file-level overview before explaining any single file.
+3. Choose a review order that helps comprehension (discussion context may override the default order).
+4. Review one file at a time.
+5. Stop after each file and wait for explicit user confirmation before continuing.
+6. Maintain a visible checklist of review progress in every file-review response.
 
 Do not explain all files in one response unless the user explicitly asks for a bulk summary.
 
@@ -42,18 +63,17 @@ If `main` is missing locally or repository conventions suggest a different base 
 
 In the first substantive review response, provide:
 
-1. Current branch name
+1. **Discussion Overview** (only if PR discussion is present — see PR Context section above)
 2. Review scope statement
-3. Changed file list
-4. ASCII folder structure covering only changed files
-5. High-level explanation of each changed file in a compact table:
+3. ASCII folder structure covering only changed files
+4. High-level explanation of each changed file in a compact table:
    - file path
    - what the file originally does
    - why this branch changed it
    - change type
-6. Recommended review order
-7. Checklist with all files marked as not started, in progress, or done
-8. The detailed review of only the first file
+5. Recommended review order (influenced by discussion focus areas when relevant)
+6. Checklist with all files marked as not started, in progress, or done
+7. The detailed review of only the first file
 
 Keep the overview compact. The goal is to orient the user before the per-file walkthrough begins.
 

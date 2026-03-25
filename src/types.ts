@@ -91,17 +91,11 @@ export interface AppConfig {
 
 // ── Interactive session types ─────────────────────────────────────────────
 
-export type SessionMode = "review" | "walkthrough";
+export type SessionMode = "walkthrough";
 
 export interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
-}
-
-export interface ReviewCursor {
-  mode: "review";
-  fileIndex: number;  // index into ReviewReport.files
-  issueIndex: number; // -1 = file summary; 0+ = specific issue
 }
 
 export interface WalkthroughCursor {
@@ -110,7 +104,7 @@ export interface WalkthroughCursor {
   walkthroughOrder: string[]; // ordered file paths
 }
 
-export type SessionCursor = ReviewCursor | WalkthroughCursor;
+export type SessionCursor = WalkthroughCursor;
 
 export interface FileMaterial {
   path: string;
@@ -153,7 +147,6 @@ export interface SessionArtifacts {
   prContext: PrContext;
   files: FileMaterial[];
   walkthroughOrder: string[];
-  reviewReport?: ReviewReport;  // only for review mode
 }
 
 export interface AppSession {

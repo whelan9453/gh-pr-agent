@@ -16,7 +16,6 @@ import { renderMarkdown, writeJsonOutput } from "./renderers.js";
 import { ReviewEngine } from "./review-engine.js";
 import {
   createWalkthroughSession,
-  createReviewSession,
   runSessionRepl,
   type InteractiveOptions
 } from "./interactive-session.js";
@@ -199,7 +198,7 @@ export function buildProgram(): Command {
     .name("gh-pr-review")
     .description("Review GitHub pull requests with Claude on Azure Foundry");
 
-  // ── Default: interactive review mode ────────────────────────────────────
+  // ── Default: interactive walkthrough mode ───────────────────────────────
   program
     .argument("[pr-url]", "GitHub pull request URL")
     .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
@@ -212,7 +211,7 @@ export function buildProgram(): Command {
         return;
       }
       const interactiveOpts = await resolveInteractiveOptions(options);
-      const session = await createReviewSession(prUrl, interactiveOpts);
+      const session = await createWalkthroughSession(prUrl, interactiveOpts);
       await runSessionRepl(session, interactiveOpts, true);
     });
 
@@ -245,21 +244,6 @@ export function buildProgram(): Command {
       await runSessionRepl(session, interactiveOpts, true);
     });
 
-  // ── review <pr-url> ──────────────────────────────────────────────────────
-  const reviewCmd = new Command("review")
-    .description("Start an interactive review session for a PR (with precompute)")
-    .argument("<pr-url>", "GitHub pull request URL")
-    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
-    .option("--prompt-file <path>", "Path to a custom prompt file")
-    .option("--verbose", "Show detailed progress logs")
-    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
-    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
-    .action(async (prUrl: string, options) => {
-      const interactiveOpts = await resolveInteractiveOptions(options);
-      const session = await createReviewSession(prUrl, interactiveOpts);
-      await runSessionRepl(session, interactiveOpts, true);
-    });
-
   // ── resume <session-id> ──────────────────────────────────────────────────
   const resumeCmd = new Command("resume")
     .description("Resume an existing interactive session")
@@ -277,7 +261,6 @@ export function buildProgram(): Command {
 
   program.addCommand(oneShotCmd);
   program.addCommand(walkthroughCmd);
-  program.addCommand(reviewCmd);
   program.addCommand(resumeCmd);
 
   return program;
