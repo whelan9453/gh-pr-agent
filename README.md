@@ -19,8 +19,21 @@
 
 ```bash
 cd /Users/whelan/repo/gh-pr-agent
+npm run setup-local
+```
+
+After that, you can run:
+
+```bash
+gh-pr-review https://github.com/OWNER/REPO/pull/123
+```
+
+For contributors who do not want a global command on `PATH`, the manual flow is:
+
+```bash
 npm install
 npm run build
+node dist/src/cli.js https://github.com/OWNER/REPO/pull/123
 ```
 
 For local use, the fastest setup is:

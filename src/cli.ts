@@ -1,5 +1,7 @@
+#!/usr/bin/env node
 import "dotenv/config";
 
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -138,7 +140,18 @@ export async function run(argv = process.argv): Promise<void> {
 }
 
 const entrypoint = fileURLToPath(import.meta.url);
-if (process.argv[1] && path.resolve(process.argv[1]) === entrypoint) {
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+const isEntrypoint =
+  invokedPath !== null &&
+  (() => {
+    try {
+      return realpathSync(invokedPath) === realpathSync(entrypoint);
+    } catch {
+      return invokedPath === entrypoint;
+    }
+  })();
+
+if (isEntrypoint) {
   run().catch((error) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     process.stderr.write(`${message}\n`);

@@ -29,8 +29,18 @@ export interface ModelClient {
   reviewFile(payload: ReviewPayload): Promise<FileReviewDraft>;
 }
 
-function buildMessagesUrl(baseURL: string): string {
-  return `${baseURL.replace(/\/+$/, "")}/v1/messages`;
+export function buildMessagesUrl(baseURL: string): string {
+  const normalized = baseURL.replace(/\/+$/, "");
+
+  if (normalized.endsWith("/v1/messages")) {
+    return normalized;
+  }
+
+  if (normalized.endsWith("/v1")) {
+    return `${normalized}/messages`;
+  }
+
+  return `${normalized}/v1/messages`;
 }
 
 function extractTextContent(responseBody: MessagesResponse): string {

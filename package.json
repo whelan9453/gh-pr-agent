@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && mkdir -p dist/prompts && cp prompts/*.md dist/prompts/",
     "dev": "tsx src/cli.ts",
+    "setup-local": "npm install && npm run build && npm link",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
