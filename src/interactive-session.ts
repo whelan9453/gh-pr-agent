@@ -210,7 +210,9 @@ function buildWalkthroughSystemPrompt(
     "  next / ok / continue / 下一個 — move to next file",
     "  jump <file-path> — jump to a specific file",
     "  status — show current position (no model response needed)",
-    "  exit — end session"
+    "  exit — end session",
+    "",
+    "IMPORTANT: Always respond in Traditional Chinese (繁體中文), regardless of the language used in the prompt or code."
   ].join("\n");
 }
 
