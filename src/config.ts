@@ -4,8 +4,6 @@ interface ResolveConfigOptions {
   model: ModelPreset;
   githubToken: string;
   azureFoundryApiKey: string;
-  promptFile: string | undefined;
-  jsonOutput: string | undefined;
 }
 
 function readRequiredEnv(name: string): string {
@@ -28,26 +26,13 @@ export function resolveConfig(options: ResolveConfigOptions): AppConfig {
     throw new Error("AZURE_FOUNDRY_BASE_URL must start with https://");
   }
 
-  const config: AppConfig = {
+  return {
     githubToken: options.githubToken,
     azureFoundryApiKey: options.azureFoundryApiKey,
     azureFoundryBaseUrl,
     selectedModel: options.model,
     deploymentName: resolveDeploymentName(options.model)
   };
-
-  if (options.promptFile) {
-    config.promptFile = options.promptFile;
-  }
-  if (options.jsonOutput) {
-    config.jsonOutput = options.jsonOutput;
-  }
-
-  return config;
-}
-
-export function resolvePromptFile(flagValue?: string): string | undefined {
-  return flagValue ?? process.env.PR_REVIEW_PROMPT_FILE?.trim() ?? undefined;
 }
 
 export { ModelPreset };

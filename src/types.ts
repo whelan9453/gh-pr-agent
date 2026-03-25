@@ -34,50 +34,6 @@ export interface ChangedFile {
   blobUrl: string | null;
 }
 
-export interface FileIssue {
-  title: string;
-  severity: "high" | "medium" | "low";
-  line: number | null;
-  confidence: "high" | "medium" | "low";
-  details: string;
-}
-
-export interface FileReview {
-  path: string;
-  previousPath: string | null;
-  status: string;
-  skipped: boolean;
-  skipReason: string | null;
-  reviewFailed: boolean;
-  reviewFailureReason: string | null;
-  truncated: boolean;
-  summary: string[];
-  issues: FileIssue[];
-}
-
-export interface ReviewReport {
-  pullRequest: {
-    owner: string;
-    repo: string;
-    number: number;
-    url: string;
-    title: string;
-    base: string;
-    head: string;
-  };
-  overallSummary: string;
-  files: FileReview[];
-}
-
-export interface ReviewPayload {
-  prompt: string;
-  input: string;
-}
-
-export interface FileReviewDraft {
-  summary: string[];
-  issues: FileIssue[];
-}
 
 export interface AppConfig {
   githubToken: string;
@@ -85,8 +41,6 @@ export interface AppConfig {
   azureFoundryApiKey: string;
   selectedModel: ModelPreset;
   deploymentName: string;
-  promptFile?: string;
-  jsonOutput?: string;
 }
 
 // ── Interactive session types ─────────────────────────────────────────────
