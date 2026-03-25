@@ -2,6 +2,7 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadPrompt } from "./prompt-loader.js";
+import { renderToTerminal } from "./terminal-renderer.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
 import { buildNumberedPatch } from "./diff-line-mapper.js";
 import { FoundryConversationClient } from "./conversation-client.js";
@@ -345,7 +346,7 @@ export async function runSessionRepl(
     const callMessages: ConversationMessage[] = [{ role: "user", content: initMessage }];
     const response = await convClient.send(systemPrompt, callMessages);
 
-    writeLine("\n" + response + "\n");
+    writeLine("\n" + renderToTerminal(response) + "\n");
 
     session.messages.push({ role: "user", content: initMessage });
     session.messages.push({ role: "assistant", content: response });
@@ -356,7 +357,7 @@ export async function runSessionRepl(
     const lastAssistant = session.messages.findLast((m) => m.role === "assistant");
     if (lastAssistant) {
       writeLine("(resuming session — last response:)\n");
-      writeLine(lastAssistant.content + "\n");
+      writeLine(renderToTerminal(lastAssistant.content) + "\n");
     }
     printStatus(session, artifacts);
   }
@@ -432,7 +433,7 @@ export async function runSessionRepl(
 
       writeProgress("Thinking...");
       const response = await convClient.send(systemPrompt, callMessages);
-      writeLine("\n" + response + "\n");
+      writeLine("\n" + renderToTerminal(response) + "\n");
 
       // Save the user-visible text and response for session history
       const savedUserContent = cmd.type === "followup" ? cmd.text : userText;

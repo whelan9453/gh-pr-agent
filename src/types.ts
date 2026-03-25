@@ -91,8 +91,6 @@ export interface AppConfig {
 
 // ── Interactive session types ─────────────────────────────────────────────
 
-export type SessionMode = "walkthrough";
-
 export interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
@@ -103,8 +101,6 @@ export interface WalkthroughCursor {
   fileIndex: number;       // index into walkthroughOrder
   walkthroughOrder: string[]; // ordered file paths
 }
-
-export type SessionCursor = WalkthroughCursor;
 
 export interface FileMaterial {
   path: string;
@@ -151,13 +147,13 @@ export interface SessionArtifacts {
 
 export interface AppSession {
   id: string;
-  mode: SessionMode;
+  mode: "walkthrough";
   prRef: PullRequestRef;
   model: ModelPreset;
   prTitle: string;
   snapshotSha: string;
   createdAt: string;
   updatedAt: string;
-  cursor: SessionCursor;
+  cursor: WalkthroughCursor;
   messages: ConversationMessage[];
 }

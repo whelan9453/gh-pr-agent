@@ -1,6 +1,6 @@
 import { ModelPreset, type AppConfig } from "./types.js";
 
-export interface ResolveConfigOptions {
+interface ResolveConfigOptions {
   model: ModelPreset;
   githubToken: string;
   azureFoundryApiKey: string;

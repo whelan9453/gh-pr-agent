@@ -23,10 +23,11 @@ function getCategory(filePath: string): number {
 }
 
 export function buildWalkthroughOrder(filePaths: string[]): string[] {
+  const originalIndex = new Map(filePaths.map((p, i) => [p, i]));
   return [...filePaths].sort((a, b) => {
     const ca = getCategory(a);
     const cb = getCategory(b);
     if (ca !== cb) return ca - cb;
-    return filePaths.indexOf(a) - filePaths.indexOf(b); // stable within category
+    return (originalIndex.get(a) ?? 0) - (originalIndex.get(b) ?? 0);
   });
 }

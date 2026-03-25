@@ -27,11 +27,11 @@ export function generateSessionId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function sessionPath(id: string): string {
+function sessionPath(id: string): string {
   return path.join(sessionsDir(), `${id}.json`);
 }
 
-export function artifactsPath(id: string): string {
+function artifactsPath(id: string): string {
   return path.join(sessionsDir(), `${id}-artifacts.json`);
 }
 

@@ -1,4 +1,4 @@
-export type ParsedCommand =
+type ParsedCommand =
   | { type: "next" }
   | { type: "jump"; filePath: string }
   | { type: "status" }

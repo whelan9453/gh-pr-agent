@@ -26,6 +26,14 @@ function readEnvSecret(name: string): string | undefined {
   return value ? value : undefined;
 }
 
+function parseModelPreset(raw: string | undefined): ModelPreset {
+  const model = (raw ?? "haiku") as ModelPreset;
+  if (model !== "sonnet" && model !== "haiku") {
+    throw new Error(`Unsupported model preset: ${raw}`);
+  }
+  return model;
+}
+
 function writeProgress(message: string): void {
   process.stderr.write(`${message}\n`);
 }
@@ -82,10 +90,7 @@ async function resolveInteractiveOptions(options: {
   promptForGithubToken?: boolean;
   promptForAzureKey?: boolean;
 }): Promise<InteractiveOptions> {
-  const model = (options.model ?? "haiku") as ModelPreset;
-  if (model !== "sonnet" && model !== "haiku") {
-    throw new Error(`Unsupported model preset: ${model}`);
-  }
+  const model = parseModelPreset(options.model);
 
   const githubToken = await resolveSecret(
     "GITHUB_TOKEN",
@@ -131,10 +136,7 @@ async function runOneShotReview(
     promptForAzureKey?: boolean;
   }
 ): Promise<void> {
-  const model = (options.model ?? "haiku") as ModelPreset;
-  if (model !== "sonnet" && model !== "haiku") {
-    throw new Error(`Unsupported model preset: ${options.model}`);
-  }
+  const model = parseModelPreset(options.model);
 
   const githubToken = await resolveSecret(
     "GITHUB_TOKEN",
@@ -191,7 +193,7 @@ async function runOneShotReview(
   }
 }
 
-export function buildProgram(): Command {
+function buildProgram(): Command {
   const program = new Command();
 
   program
@@ -266,7 +268,7 @@ export function buildProgram(): Command {
   return program;
 }
 
-export async function run(argv = process.argv): Promise<void> {
+async function run(argv = process.argv): Promise<void> {
   const program = buildProgram();
   await program.parseAsync(argv);
 }

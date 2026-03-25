@@ -69,7 +69,7 @@ export function buildNumberedContext(
   maxChars = 16000
 ): ContextResult {
   const lines = content.split("\n");
-  const sortedFocus = [...new Set(Array.from(focusLines).filter((line) => line > 0))].sort(
+  const sortedFocus = Array.from(new Set(focusLines)).filter((line) => line > 0).sort(
     (a, b) => a - b
   );
 
