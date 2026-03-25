@@ -1,54 +1,29 @@
-import { getSecret } from "./keychain.js";
-import { AppConfig, ModelPreset, PersistedConfig } from "./types.js";
+import { ModelPreset, type AppConfig } from "./types.js";
 
 export interface ResolveConfigOptions {
   model: ModelPreset;
   githubToken: string;
   azureFoundryApiKey: string;
-  persistedConfig: PersistedConfig;
   promptFile: string | undefined;
   jsonOutput: string | undefined;
 }
 
-function readRequiredEnv(name: string, fallback?: string): string {
+function readRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
-  if (value) {
-    return value;
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
   }
-  if (fallback) {
-    return fallback;
-  }
-  throw new Error(`Missing required environment variable: ${name}`);
+  return value;
 }
 
-function readOptionalEnv(name: string, fallback?: string): string | undefined {
-  const value = process.env[name]?.trim();
-  return value || fallback;
-}
-
-export async function resolveSecretFromEnvOrStore(
-  envName: "GITHUB_TOKEN" | "AZURE_FOUNDRY_API_KEY",
-  storeName: "github-token" | "azure-foundry-api-key"
-): Promise<string | undefined> {
-  const value = process.env[envName]?.trim();
-  if (value) {
-    return value;
-  }
-  return getSecret(storeName);
-}
-
-function resolveDeploymentName(model: ModelPreset, persistedConfig: PersistedConfig): string {
+function resolveDeploymentName(model: ModelPreset): string {
   const envName =
     model === "sonnet" ? "AZURE_FOUNDRY_SONNET_DEPLOYMENT" : "AZURE_FOUNDRY_HAIKU_DEPLOYMENT";
-  return readRequiredEnv(envName, persistedConfig.deployments?.[model]);
+  return readRequiredEnv(envName);
 }
 
 export function resolveConfig(options: ResolveConfigOptions): AppConfig {
-  const azureFoundryBaseUrl = readRequiredEnv(
-    "AZURE_FOUNDRY_BASE_URL",
-    options.persistedConfig.azureFoundryBaseUrl
-  ).replace(/\/+$/, "");
-
+  const azureFoundryBaseUrl = readRequiredEnv("AZURE_FOUNDRY_BASE_URL").replace(/\/+$/, "");
   if (!azureFoundryBaseUrl.startsWith("https://")) {
     throw new Error("AZURE_FOUNDRY_BASE_URL must start with https://");
   }
@@ -58,7 +33,7 @@ export function resolveConfig(options: ResolveConfigOptions): AppConfig {
     azureFoundryApiKey: options.azureFoundryApiKey,
     azureFoundryBaseUrl,
     selectedModel: options.model,
-    deploymentName: resolveDeploymentName(options.model, options.persistedConfig)
+    deploymentName: resolveDeploymentName(options.model)
   };
 
   if (options.promptFile) {
@@ -71,22 +46,8 @@ export function resolveConfig(options: ResolveConfigOptions): AppConfig {
   return config;
 }
 
-export function resolvePromptFile(
-  flagValue: string | undefined,
-  persistedConfig: PersistedConfig
-): string | undefined {
-  if (flagValue) {
-    return flagValue;
-  }
-  return readOptionalEnv("PR_REVIEW_PROMPT_FILE", persistedConfig.promptFile);
-}
-
-export function resolveDefaultModel(persistedConfig: PersistedConfig): ModelPreset {
-  const value = process.env.GH_PR_AGENT_DEFAULT_MODEL?.trim();
-  if (value === "sonnet" || value === "haiku") {
-    return value;
-  }
-  return persistedConfig.defaultModel ?? "haiku";
+export function resolvePromptFile(flagValue?: string): string | undefined {
+  return flagValue ?? process.env.PR_REVIEW_PROMPT_FILE?.trim() ?? undefined;
 }
 
 export { ModelPreset };

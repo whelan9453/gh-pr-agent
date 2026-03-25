@@ -1,12 +1,5 @@
 export type ModelPreset = "sonnet" | "haiku";
 
-export interface PersistedConfig {
-  azureFoundryBaseUrl?: string;
-  defaultModel?: ModelPreset;
-  deployments?: Partial<Record<ModelPreset, string>>;
-  promptFile?: string;
-}
-
 export interface PullRequestRef {
   host: string;
   owner: string;
@@ -94,11 +87,4 @@ export interface AppConfig {
   deploymentName: string;
   promptFile?: string;
   jsonOutput?: string;
-}
-
-export interface StoredAuthStatus {
-  keychainAvailable: boolean;
-  githubTokenStored: boolean;
-  azureFoundryApiKeyStored: boolean;
-  config: PersistedConfig;
 }

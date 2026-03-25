@@ -8,7 +8,6 @@
 - Use Azure Foundry Claude deployments
 - Generate per-file change highlights and possible issues with line numbers
 - Save structured JSON output for future GitHub comment automation
-- Store secrets in macOS Keychain instead of repo files
 
 ## Requirements
 
@@ -24,57 +23,17 @@ npm install
 npm run build
 ```
 
-## Credential Management
-
-Recommended local setup on macOS:
-
-```bash
-gh-pr-review auth login
-```
-
-This stores:
-
-- `GITHUB_TOKEN` in macOS Keychain
-- `AZURE_FOUNDRY_API_KEY` in macOS Keychain
-- non-secret defaults such as base URL and deployment names in your local user config
-
-Inspect stored status:
-
-```bash
-gh-pr-review auth status
-```
-
-Remove stored secrets:
-
-```bash
-gh-pr-review auth logout
-```
-
-Remove secrets and local defaults:
-
-```bash
-gh-pr-review auth logout --all
-```
-
-Runtime resolution order:
-
-1. Environment variables
-2. Stored local config and macOS Keychain
-3. Hidden prompt flags
-
 ## Configuration
 
 Required:
 
+- `GITHUB_TOKEN`
 - `AZURE_FOUNDRY_BASE_URL`
-- `AZURE_FOUNDRY_HAIKU_DEPLOYMENT`
+- `AZURE_FOUNDRY_API_KEY`
+- `AZURE_FOUNDRY_HAIKU_DEPLOYMENT` or `AZURE_FOUNDRY_SONNET_DEPLOYMENT`
 
 Optional:
 
-- `GITHUB_TOKEN`
-- `AZURE_FOUNDRY_API_KEY`
-- `AZURE_FOUNDRY_SONNET_DEPLOYMENT`
-- `GH_PR_AGENT_DEFAULT_MODEL`
 - `PR_REVIEW_PROMPT_FILE`
 
 `AZURE_FOUNDRY_BASE_URL` should look like:
@@ -89,7 +48,7 @@ https://<resource>.services.ai.azure.com/anthropic
 gh-pr-review https://github.com/OWNER/REPO/pull/123
 ```
 
-Prompt for hidden secrets when nothing is stored:
+Prompt for hidden secrets when env vars are unset:
 
 ```bash
 gh-pr-review https://github.com/OWNER/REPO/pull/123 --prompt-for-github-token --prompt-for-azure-key
@@ -99,6 +58,7 @@ Choose a different deployment preset:
 
 ```bash
 gh-pr-review https://github.com/OWNER/REPO/pull/123 --model haiku
+gh-pr-review https://github.com/OWNER/REPO/pull/123 --model sonnet
 ```
 
 Write JSON output:

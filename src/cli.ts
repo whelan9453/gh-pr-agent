@@ -1,120 +1,84 @@
 import path from "node:path";
+import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { Command } from "commander";
 
-import { askHidden, clearStoredAuth, loadStoredAuthStatus, loginAndStoreAuth } from "./auth.js";
-import {
-  ModelPreset,
-  resolveConfig,
-  resolveDefaultModel,
-  resolvePromptFile,
-  resolveSecretFromEnvOrStore
-} from "./config.js";
+import { ModelPreset, resolveConfig, resolvePromptFile } from "./config.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
 import { ClaudeFoundryClient } from "./model-client.js";
 import { loadPrompt } from "./prompt-loader.js";
 import { renderMarkdown, writeJsonOutput } from "./renderers.js";
 import { ReviewEngine } from "./review-engine.js";
-import { readPersistedConfig } from "./user-config.js";
+
+function readEnvSecret(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+async function promptHidden(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true
+    });
+
+    const onDataHandler = (char: Buffer) => {
+      const text = char.toString("utf8");
+      if (text === "\n" || text === "\r" || text === "\u0004") {
+        process.stdout.write("\n");
+      } else {
+        process.stdout.write("*");
+      }
+    };
+
+    process.stdin.on("data", onDataHandler);
+    rl.question(`${question}: `, (answer) => {
+      process.stdin.removeListener("data", onDataHandler);
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
 
 async function resolveSecret(
   envName: "GITHUB_TOKEN" | "AZURE_FOUNDRY_API_KEY",
-  storeName: "github-token" | "azure-foundry-api-key",
   shouldPrompt: boolean,
   message: string
 ): Promise<string> {
-  const existing = await resolveSecretFromEnvOrStore(envName, storeName);
+  const existing = readEnvSecret(envName);
   if (existing) {
     return existing;
   }
   if (!shouldPrompt) {
     throw new Error(`Missing required secret: ${envName}`);
   }
-  const value = await askHidden(`${message}: `);
+  const value = await promptHidden(message);
   if (!value) {
     throw new Error(`Missing required secret: ${envName}`);
   }
   return value;
 }
 
-export function buildReviewProgram(): Command {
+export function buildProgram(): Command {
   const program = new Command();
 
   program
     .name("gh-pr-review")
     .description("Review GitHub pull requests with Claude on Azure Foundry")
     .argument("<pr-url>", "GitHub pull request URL")
-    .option("--model <preset>", "Model preset: sonnet or haiku")
+    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
     .option("--prompt-file <path>", "Path to a review prompt file")
     .option("--json-output <path>", "Write structured JSON output to a file")
-    .option("--prompt-for-github-token", "Prompt for GitHub token if no env var or Keychain secret exists")
-    .option("--prompt-for-azure-key", "Prompt for Azure key if no env var or Keychain secret exists");
-
-  program.addHelpText(
-    "after",
-    "\nCommands:\n  gh-pr-review auth login|status|logout  Manage stored credentials"
-  );
-
-  return program;
-}
-
-export function buildAuthProgram(): Command {
-  const program = new Command();
-
-  program.name("gh-pr-review auth").description("Manage stored credentials");
-
-  program
-    .command("login")
-    .description("Store secrets in macOS Keychain and defaults in local user config")
-    .action(async () => {
-      await loginAndStoreAuth();
-      process.stdout.write("Stored secrets in macOS Keychain and updated local config.\n");
-    });
-
-  program
-    .command("status")
-    .description("Show whether stored secrets and defaults are available")
-    .action(async () => {
-      const status = await loadStoredAuthStatus();
-      process.stdout.write(`Keychain available: ${status.keychainAvailable}\n`);
-      process.stdout.write(`GitHub token stored: ${status.githubTokenStored}\n`);
-      process.stdout.write(`Azure API key stored: ${status.azureFoundryApiKeyStored}\n`);
-      process.stdout.write(
-        `Azure base URL configured: ${status.config.azureFoundryBaseUrl ? "yes" : "no"}\n`
-      );
-      process.stdout.write(
-        `Haiku deployment configured: ${status.config.deployments?.haiku ?? "no"}\n`
-      );
-      process.stdout.write(
-        `Sonnet deployment configured: ${status.config.deployments?.sonnet ?? "no"}\n`
-      );
-      process.stdout.write(`Default model: ${status.config.defaultModel ?? "haiku"}\n`);
-      process.stdout.write(`Prompt file: ${status.config.promptFile ?? "not set"}\n`);
-    });
-
-  program
-    .command("logout")
-    .description("Remove stored secrets; add --all to remove local config too")
-    .option("--all", "Also delete local non-secret config")
-    .action(async (options: { all?: boolean }) => {
-      await clearStoredAuth(Boolean(options.all));
-      process.stdout.write(
-        options.all ? "Removed stored secrets and local config.\n" : "Removed stored secrets.\n"
-      );
-    });
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset");
 
   return program;
 }
 
 export async function run(argv = process.argv): Promise<void> {
-  if (argv[2] === "auth") {
-    const program = buildAuthProgram();
-    await program.parseAsync([argv[0] ?? "node", argv[1] ?? "gh-pr-review auth", ...argv.slice(3)]);
-    return;
-  }
-
-  const program = buildReviewProgram();
+  const program = buildProgram();
   await program.parseAsync(argv);
 
   const prUrl = program.args[0];
@@ -122,7 +86,6 @@ export async function run(argv = process.argv): Promise<void> {
     throw new Error("Missing pull request URL");
   }
 
-  const persistedConfig = await readPersistedConfig();
   const options = program.opts<{
     model?: string;
     promptFile?: string;
@@ -131,20 +94,18 @@ export async function run(argv = process.argv): Promise<void> {
     promptForAzureKey?: boolean;
   }>();
 
-  const model = (options.model ?? resolveDefaultModel(persistedConfig)) as ModelPreset;
+  const model = (options.model ?? "haiku") as ModelPreset;
   if (model !== "sonnet" && model !== "haiku") {
     throw new Error(`Unsupported model preset: ${options.model}`);
   }
 
   const githubToken = await resolveSecret(
     "GITHUB_TOKEN",
-    "github-token",
     Boolean(options.promptForGithubToken),
     "GitHub token"
   );
   const azureFoundryApiKey = await resolveSecret(
     "AZURE_FOUNDRY_API_KEY",
-    "azure-foundry-api-key",
     Boolean(options.promptForAzureKey),
     "Azure Foundry API key"
   );
@@ -153,8 +114,7 @@ export async function run(argv = process.argv): Promise<void> {
     model,
     githubToken,
     azureFoundryApiKey,
-    persistedConfig,
-    promptFile: resolvePromptFile(options.promptFile, persistedConfig),
+    promptFile: resolvePromptFile(options.promptFile),
     jsonOutput: options.jsonOutput
   });
 
