@@ -8,6 +8,6 @@ const __dirname = path.dirname(__filename);
 export async function loadPrompt(promptFile?: string): Promise<string> {
   const candidate = promptFile
     ? path.resolve(promptFile)
-    : path.resolve(__dirname, "..", "prompts", "review_prompt.md");
+    : path.resolve(__dirname, "..", "prompts", "branch-diff-walkthrough.md");
   return readFile(candidate, "utf8");
 }

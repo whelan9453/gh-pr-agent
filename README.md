@@ -83,6 +83,8 @@ Use a custom review prompt:
 gh-pr-review https://github.com/OWNER/REPO/pull/123 --prompt-file /absolute/path/to/review_prompt.md
 ```
 
+The built-in default prompt is [`prompts/branch-diff-walkthrough.md`](/Users/whelan/repo/gh-pr-agent/prompts/branch-diff-walkthrough.md).
+
 ## Security Notes
 
 - Do not paste PATs or API keys into terminal commands. They end up in shell history and process lists.
