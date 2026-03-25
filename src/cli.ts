@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import "dotenv/config";
-
+import { config as loadDotenv } from "dotenv";
 import { realpathSync } from "node:fs";
-import path from "node:path";
+import path, { dirname, join } from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
+
+loadDotenv({ path: join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".env") });
 
 import { Command } from "commander";
 
