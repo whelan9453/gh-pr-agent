@@ -20,6 +20,7 @@ import type {
   AppSession,
   SessionArtifacts,
   FileMaterial,
+  PrContext,
   WalkthroughCursor,
   ReviewCursor,
   ConversationMessage,
@@ -56,12 +57,23 @@ export async function createWalkthroughSession(
   const pr = parsePullRequestUrl(prUrl);
   const github = new GitHubClient(opts.githubToken, pr.apiBaseUrl);
 
-  writeProgress("Fetching PR metadata...");
-  const prInfo = await github.getPullRequest(pr);
+  writeProgress("Fetching PR metadata and comments...");
+  const [prInfo, changedFiles, issueComments, reviews, reviewComments] = await Promise.all([
+    github.getPullRequest(pr),
+    github.listPullRequestFiles(pr),
+    github.listIssueComments(pr),
+    github.listReviews(pr),
+    github.listReviewComments(pr)
+  ]);
   writeProgress(`Loaded PR #${pr.number}: ${prInfo.title}`);
-  writeProgress("Fetching changed files...");
-  const changedFiles = await github.listPullRequestFiles(pr);
-  writeProgress(`Found ${changedFiles.length} changed file(s).`);
+  writeProgress(`Found ${changedFiles.length} changed file(s), ${reviews.length} review(s), ${issueComments.length + reviewComments.length} comment(s).`);
+
+  const prContext: PrContext = {
+    description: prInfo.body,
+    issueComments,
+    reviews,
+    reviewComments
+  };
 
   writeProgress("Building file materials...");
   const files: FileMaterial[] = changedFiles.map((f) => ({
@@ -74,7 +86,7 @@ export async function createWalkthroughSession(
 
   const walkthroughOrder = buildWalkthroughOrder(files.map((f) => f.path));
 
-  const artifacts: SessionArtifacts = { prInfo, files, walkthroughOrder };
+  const artifacts: SessionArtifacts = { prInfo, prContext, files, walkthroughOrder };
 
   const id = generateSessionId();
   const now = new Date().toISOString();
@@ -112,28 +124,38 @@ export async function createReviewSession(
   const pr = parsePullRequestUrl(prUrl);
   const github = new GitHubClient(opts.githubToken, pr.apiBaseUrl);
 
-  writeProgress("Fetching PR metadata...");
-  const prInfo = await github.getPullRequest(pr);
-  writeProgress(`Loaded PR #${pr.number}: ${prInfo.title}`);
-
-  // Run full ReviewEngine precompute
-  writeProgress("Running precompute review (this may take a moment)...");
+  writeProgress("Fetching PR metadata and comments...");
   const reviewPrompt = await loadPrompt(resolvePromptPath("review_prompt.md"));
-
   const foundryClient = new ClaudeFoundryClient(
     opts.azureFoundryBaseUrl,
     opts.azureFoundryApiKey,
     opts.deploymentName,
     opts.verbose ? { onVerbose: writeProgress } : undefined
   );
-
   const engine = new ReviewEngine(github, foundryClient, reviewPrompt, {
     onProgress: writeProgress,
     verbose: opts.verbose ?? false
   });
 
-  const reviewReport = await engine.reviewPullRequest(pr);
-  writeProgress("Precompute complete.");
+  // Fetch PR info, comments, and run precompute all in parallel
+  const [reviewReport, prInfo, issueComments, reviews, reviewComments] = await Promise.all([
+    engine.reviewPullRequest(pr).then((report) => {
+      writeProgress("Precompute complete.");
+      return report;
+    }),
+    github.getPullRequest(pr),
+    github.listIssueComments(pr),
+    github.listReviews(pr),
+    github.listReviewComments(pr)
+  ]);
+  writeProgress(`${reviews.length} review(s), ${issueComments.length + reviewComments.length} comment(s) loaded.`);
+
+  const prContext: PrContext = {
+    description: prInfo.body,
+    issueComments,
+    reviews,
+    reviewComments
+  };
 
   const files: FileMaterial[] = reviewReport.files.map((f) => ({
     path: f.path,
@@ -144,7 +166,7 @@ export async function createReviewSession(
   }));
 
   const walkthroughOrder = buildWalkthroughOrder(files.map((f) => f.path));
-  const artifacts: SessionArtifacts = { prInfo, files, walkthroughOrder, reviewReport };
+  const artifacts: SessionArtifacts = { prInfo, prContext, files, walkthroughOrder, reviewReport };
 
   const id = generateSessionId();
   const now = new Date().toISOString();
@@ -238,6 +260,44 @@ function jumpReviewCursor(
   );
   if (index < 0) return cursor;
   return { ...cursor, fileIndex: index, issueIndex: -1 };
+}
+
+// ── PR context block ───────────────────────────────────────────────────────
+
+function buildPrContextBlock(prContext: PrContext): string {
+  const parts: string[] = [];
+
+  if (prContext.description.trim()) {
+    parts.push("PR Description:", prContext.description.trim());
+  }
+
+  const substantiveReviews = prContext.reviews.filter(
+    (r) => r.state !== "COMMENTED" || r.body.trim()
+  );
+  if (substantiveReviews.length > 0) {
+    parts.push("", "Reviews:");
+    for (const r of substantiveReviews) {
+      const body = r.body.trim() ? ` — "${r.body.trim()}"` : "";
+      parts.push(`  @${r.author}: ${r.state}${body}`);
+    }
+  }
+
+  if (prContext.reviewComments.length > 0) {
+    parts.push("", "Inline Review Comments:");
+    for (const c of prContext.reviewComments) {
+      const loc = c.line ? `:${c.line}` : "";
+      parts.push(`  @${c.author} on ${c.path}${loc} — "${c.body.trim()}"`);
+    }
+  }
+
+  if (prContext.issueComments.length > 0) {
+    parts.push("", "Discussion:");
+    for (const c of prContext.issueComments) {
+      parts.push(`  @${c.author}: ${c.body.trim()}`);
+    }
+  }
+
+  return parts.join("\n");
 }
 
 // ── Context builders ───────────────────────────────────────────────────────
@@ -398,12 +458,15 @@ function buildInitialWalkthroughMessage(
     ? buildFileMaterialBlock(firstFilePath, artifacts)
     : "";
 
+  const prContextBlock = buildPrContextBlock(artifacts.prContext);
+
   return [
     `Begin the walkthrough for PR #${session.prRef.number}: ${session.prTitle}`,
     "",
     `Author: ${prInfo.author}`,
     `Base: ${prInfo.base} → ${prInfo.head}`,
     `Changes: +${prInfo.additions} -${prInfo.deletions}, ${prInfo.changedFiles} files`,
+    ...(prContextBlock ? ["", prContextBlock] : []),
     "",
     "Changed files — follow this exact order, do NOT reorder:",
     "```",
@@ -432,12 +495,15 @@ function buildInitialReviewMessage(session: AppSession, artifacts: SessionArtifa
   const currentFile = report.files[c.fileIndex];
   const currentMaterial = buildReviewFileMaterialBlock(c.fileIndex, c.issueIndex, artifacts);
 
+  const prContextBlock = buildPrContextBlock(artifacts.prContext);
+
   return [
     `Begin interactive review for PR #${session.prRef.number}: ${session.prTitle}`,
     "",
     `Author: ${artifacts.prInfo.author}`,
     `Base: ${artifacts.prInfo.base} → ${artifacts.prInfo.head}`,
     `Summary: ${report.overallSummary}`,
+    ...(prContextBlock ? ["", prContextBlock] : []),
     "",
     "Files:",
     ...fileLines,

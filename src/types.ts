@@ -120,8 +120,37 @@ export interface FileMaterial {
   numberedPatch: string | null;  // output of buildNumberedPatch
 }
 
+export interface PrIssueComment {
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface PrReview {
+  author: string;
+  state: string;
+  body: string;
+  submittedAt: string;
+}
+
+export interface PrReviewComment {
+  author: string;
+  path: string;
+  line: number | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface PrContext {
+  description: string;
+  issueComments: PrIssueComment[];
+  reviews: PrReview[];
+  reviewComments: PrReviewComment[];
+}
+
 export interface SessionArtifacts {
   prInfo: PullRequestInfo;
+  prContext: PrContext;
   files: FileMaterial[];
   walkthroughOrder: string[];
   reviewReport?: ReviewReport;  // only for review mode

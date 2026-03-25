@@ -1,7 +1,14 @@
 import { Octokit } from "@octokit/rest";
 import fetch from "node-fetch";
 
-import { ChangedFile, PullRequestInfo, PullRequestRef } from "./types.js";
+import {
+  ChangedFile,
+  PullRequestInfo,
+  PullRequestRef,
+  PrIssueComment,
+  PrReview,
+  PrReviewComment
+} from "./types.js";
 
 const PR_URL_RE =
   /^https:\/\/(?<host>[^/]+)\/(?<owner>[^/]+)\/(?<repo>[^/]+)\/pull\/(?<number>\d+)(?:\/.*)?$/;
@@ -82,6 +89,51 @@ export class GitHubClient {
       patch: "patch" in file ? file.patch ?? null : null,
       contentsUrl: file.contents_url ?? null,
       blobUrl: file.blob_url ?? null
+    }));
+  }
+
+  async listIssueComments(pr: PullRequestRef): Promise<PrIssueComment[]> {
+    const comments = await this.octokit.paginate(this.octokit.issues.listComments, {
+      owner: pr.owner,
+      repo: pr.repo,
+      issue_number: pr.number,
+      per_page: 100
+    });
+    return comments.map((c) => ({
+      author: c.user?.login ?? "unknown",
+      body: c.body ?? "",
+      createdAt: c.created_at
+    }));
+  }
+
+  async listReviews(pr: PullRequestRef): Promise<PrReview[]> {
+    const reviews = await this.octokit.paginate(this.octokit.pulls.listReviews, {
+      owner: pr.owner,
+      repo: pr.repo,
+      pull_number: pr.number,
+      per_page: 100
+    });
+    return reviews.map((r) => ({
+      author: r.user?.login ?? "unknown",
+      state: r.state,
+      body: r.body ?? "",
+      submittedAt: r.submitted_at ?? ""
+    }));
+  }
+
+  async listReviewComments(pr: PullRequestRef): Promise<PrReviewComment[]> {
+    const comments = await this.octokit.paginate(this.octokit.pulls.listReviewComments, {
+      owner: pr.owner,
+      repo: pr.repo,
+      pull_number: pr.number,
+      per_page: 100
+    });
+    return comments.map((c) => ({
+      author: c.user?.login ?? "unknown",
+      path: c.path,
+      line: c.line ?? c.original_line ?? null,
+      body: c.body,
+      createdAt: c.created_at
     }));
   }
 
