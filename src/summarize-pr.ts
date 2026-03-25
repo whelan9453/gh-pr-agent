@@ -1,14 +1,16 @@
 import { createInterface } from "node:readline";
-import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FoundryConversationClient } from "./conversation-client.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
 import { buildNumberedPatch } from "./diff-line-mapper.js";
-import { buildPrContextBlock } from "./interactive-session.js";
+import { buildPrContextBlock, writeProgress } from "./interactive-session.js";
+import { loadPrompt } from "./prompt-loader.js";
 import { renderToTerminal } from "./terminal-renderer.js";
 import type { InteractiveOptions } from "./interactive-session.js";
+import type { ConversationMessage } from "./types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -19,10 +21,6 @@ interface SummaryComment {
   body: string;
   path: string | null;
   line: number | null;
-}
-
-function writeProgress(msg: string): void {
-  process.stderr.write(`${msg}\n`);
 }
 
 function parseCommentsFromResponse(raw: string): { analysis: string; comments: SummaryComment[] } {
@@ -104,18 +102,18 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     reviewComments
   };
 
-  const parsedPatches = changedFiles.map((f) =>
-    f.patch ? buildNumberedPatch(f.patch) : null
-  );
-  const validLinesByPath = new Map<string, Set<number>>(
-    changedFiles.map((f, i) => [f.path, parsedPatches[i]?.validNewLines ?? new Set()])
-  );
-  const numberedPatches = parsedPatches.map((p) => p?.numberedPatch ?? null);
-  const totalPatchChars = numberedPatches.reduce((sum, p) => sum + (p?.length ?? 0), 0);
+  // Single pass: parse patches and collect valid line sets simultaneously
+  const patchData = changedFiles.map((f) => {
+    if (!f.patch) return { numberedPatch: null, validNewLines: new Set<number>() };
+    const { numberedPatch, validNewLines } = buildNumberedPatch(f.patch);
+    return { numberedPatch, validNewLines };
+  });
+  const validLinesByPath = new Map(changedFiles.map((f, i) => [f.path, patchData[i]?.validNewLines ?? new Set<number>()]));
+  const totalPatchChars = patchData.reduce((sum, p) => sum + (p?.numberedPatch?.length ?? 0), 0);
 
   const fileBlocks = changedFiles.map((f, i) => {
     const parts = [`### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`];
-    const patch = numberedPatches[i];
+    const patch = patchData[i]?.numberedPatch ?? null;
     if (patch) {
       let displayed = patch;
       if (totalPatchChars > TOTAL_PATCH_BUDGET) {
@@ -145,10 +143,7 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     fileBlocks.join("\n\n")
   ].join("\n");
 
-  const systemPrompt = await readFile(
-    join(MODULE_DIR, "..", "prompts", "pr-summary.md"),
-    "utf8"
-  );
+  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
 
   writeProgress("Generating summary...");
   const client = new FoundryConversationClient(
@@ -157,9 +152,7 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     opts.deploymentName
   );
 
-  const messages: Array<{ role: "user" | "assistant"; content: string }> = [
-    { role: "user", content: userMessage }
-  ];
+  const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
 
   const raw = await client.send(systemPrompt, messages, 1500);
   const { analysis, comments } = parseCommentsFromResponse(raw);
@@ -182,21 +175,16 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
 
     writeProgress(`Posting ${selected.length} comment(s) to GitHub...`);
 
-    // Validate inline candidates against the diff — only lines present in the
-    // numbered patch (context + added) can be used as GitHub inline comment targets.
     const validInline: Array<SummaryComment & { path: string; line: number }> = [];
     const fallbackToBody: SummaryComment[] = [];
 
     for (const c of selected) {
-      if (c.path && c.line) {
-        const validLines = validLinesByPath.get(c.path);
-        if (validLines?.has(c.line)) {
-          validInline.push(c as SummaryComment & { path: string; line: number });
-        } else {
-          writeProgress(`  Line ${c.line} in ${c.path} is not in the diff — posting as review body`);
-          fallbackToBody.push(c);
-        }
+      if (c.path && c.line && validLinesByPath.get(c.path)?.has(c.line)) {
+        validInline.push(c as SummaryComment & { path: string; line: number });
       } else {
+        if (c.path && c.line) {
+          writeProgress(`  Line ${c.line} in ${c.path} is not in the diff — posting as review body`);
+        }
         fallbackToBody.push(c);
       }
     }
@@ -216,51 +204,44 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     process.stdout.write(`  Posted review: ${url}\n`);
   };
 
-  // Track latest comments in case follow-up responses update them
   let latestComments = comments;
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
 
-  const readLine = (): Promise<string> =>
-    new Promise((resolve) => {
+  try {
+    for await (const line of rl) {
+      const input = line.trim();
+      if (!input) continue;
+
+      if (input.toLowerCase() === "exit" || input.toLowerCase() === "quit") {
+        process.stdout.write("Exiting without posting.\n");
+        break;
+      }
+
+      if (input.toLowerCase() === "post" || input.toLowerCase() === "send") {
+        await postComments(latestComments, "COMMENT");
+        break;
+      }
+
+      if (input.toLowerCase() === "approve") {
+        writeProgress("Approving PR...");
+        const url = await github.createReview(pr, prInfo.headSha, "", [], "APPROVE");
+        process.stdout.write(`  Approved: ${url}\n`);
+        break;
+      }
+
+      messages.push({ role: "user", content: input });
+      writeProgress("Thinking...");
+      const followUp = await client.send(systemPrompt, messages, 1500);
+      const parsed = parseCommentsFromResponse(followUp);
+      if (parsed.comments.length > 0) {
+        latestComments = parsed.comments;
+      }
+      messages.push({ role: "assistant", content: followUp });
+      process.stdout.write("\n" + renderToTerminal(parsed.analysis) + "\n");
       process.stdout.write("\n> ");
-      rl.once("line", (line) => resolve(line.trim()));
-    });
-
-  while (true) {
-    const input = await readLine();
-
-    if (!input) continue;
-
-    if (input.toLowerCase() === "exit" || input.toLowerCase() === "quit") {
-      process.stdout.write("Exiting without posting.\n");
-      rl.close();
-      break;
     }
-
-    if (input.toLowerCase() === "post" || input.toLowerCase() === "send") {
-      rl.close();
-      await postComments(latestComments, "COMMENT");
-      break;
-    }
-
-    if (input.toLowerCase() === "approve") {
-      rl.close();
-      writeProgress("Approving PR...");
-      const url = await github.createReview(pr, prInfo.headSha, "", [], "APPROVE");
-      process.stdout.write(`  Approved: ${url}\n`);
-      break;
-    }
-
-    // Follow-up question — send to model with full conversation history
-    messages.push({ role: "user", content: input });
-    writeProgress("Thinking...");
-    const followUp = await client.send(systemPrompt, messages, 1500);
-    const parsed = parseCommentsFromResponse(followUp);
-    if (parsed.comments.length > 0) {
-      latestComments = parsed.comments;
-    }
-    messages.push({ role: "assistant", content: followUp });
-    process.stdout.write("\n" + renderToTerminal(parsed.analysis) + "\n");
+  } finally {
+    rl.close();
   }
 }

@@ -27,7 +27,7 @@ import type { ModelPreset } from "./config.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
-function writeProgress(msg: string): void {
+export function writeProgress(msg: string): void {
   process.stderr.write(`${msg}\n`);
 }
 
