@@ -246,7 +246,9 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
 
     if (input.toLowerCase() === "approve") {
       rl.close();
-      await postComments(latestComments, "APPROVE");
+      writeProgress("Approving PR...");
+      const url = await github.createReview(pr, prInfo.headSha, "", [], "APPROVE");
+      process.stdout.write(`  Approved: ${url}\n`);
       break;
     }
 
