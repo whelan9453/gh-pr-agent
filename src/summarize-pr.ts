@@ -104,9 +104,13 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     reviewComments
   };
 
-  const numberedPatches = changedFiles.map((f) =>
-    f.patch ? buildNumberedPatch(f.patch).numberedPatch : null
+  const parsedPatches = changedFiles.map((f) =>
+    f.patch ? buildNumberedPatch(f.patch) : null
   );
+  const validLinesByPath = new Map<string, Set<number>>(
+    changedFiles.map((f, i) => [f.path, parsedPatches[i]?.validNewLines ?? new Set()])
+  );
+  const numberedPatches = parsedPatches.map((p) => p?.numberedPatch ?? null);
   const totalPatchChars = numberedPatches.reduce((sum, p) => sum + (p?.length ?? 0), 0);
 
   const fileBlocks = changedFiles.map((f, i) => {
@@ -178,30 +182,37 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
 
     writeProgress(`Posting ${selected.length} comment(s) to GitHub...`);
 
-    const inlineComments = selected.filter((c) => c.path && c.line) as Array<
-      SummaryComment & { path: string; line: number }
-    >;
-    const generalComments = selected.filter((c) => !c.path || !c.line);
-    const reviewBody = generalComments.map((c) => c.body).join("\n\n");
+    // Validate inline candidates against the diff — only lines present in the
+    // numbered patch (context + added) can be used as GitHub inline comment targets.
+    const validInline: Array<SummaryComment & { path: string; line: number }> = [];
+    const fallbackToBody: SummaryComment[] = [];
 
-    try {
-      const url = await github.createReview(
-        pr,
-        prInfo.headSha,
-        reviewBody,
-        inlineComments.map((c) => ({ path: c.path, line: c.line, body: c.body }))
-      );
-      process.stdout.write(`  Posted review: ${url}\n`);
-    } catch {
-      const fallbackBody = selected.map((c) => {
-        const loc = c.path && c.line ? `**${c.path}:${c.line}**\n` : "";
-        return `${loc}${c.body}`;
-      }).join("\n\n---\n\n");
-
-      writeProgress("Inline comment failed (invalid line?), falling back to review body...");
-      const url = await github.createReview(pr, prInfo.headSha, fallbackBody, []);
-      process.stdout.write(`  Posted review: ${url}\n`);
+    for (const c of selected) {
+      if (c.path && c.line) {
+        const validLines = validLinesByPath.get(c.path);
+        if (validLines?.has(c.line)) {
+          validInline.push(c as SummaryComment & { path: string; line: number });
+        } else {
+          writeProgress(`  Line ${c.line} in ${c.path} is not in the diff — posting as review body`);
+          fallbackToBody.push(c);
+        }
+      } else {
+        fallbackToBody.push(c);
+      }
     }
+
+    const reviewBody = fallbackToBody.map((c) => {
+      const loc = c.path && c.line ? `**${c.path}:${c.line}**\n` : "";
+      return `${loc}${c.body}`;
+    }).join("\n\n---\n\n");
+
+    const url = await github.createReview(
+      pr,
+      prInfo.headSha,
+      reviewBody,
+      validInline.map((c) => ({ path: c.path, line: c.line, body: c.body }))
+    );
+    process.stdout.write(`  Posted review: ${url}\n`);
   };
 
   // Track latest comments in case follow-up responses update them
