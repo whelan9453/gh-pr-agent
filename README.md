@@ -23,6 +23,14 @@ npm install
 npm run build
 ```
 
+For local use, the fastest setup is:
+
+```bash
+cp .env.example .env
+```
+
+Then paste your local secrets into `.env`. The file is gitignored.
+
 ## Configuration
 
 Required:
@@ -35,6 +43,8 @@ Required:
 Optional:
 
 - `PR_REVIEW_PROMPT_FILE`
+
+The CLI auto-loads `.env` at startup.
 
 `AZURE_FOUNDRY_BASE_URL` should look like:
 

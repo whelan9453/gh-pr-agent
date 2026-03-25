@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
