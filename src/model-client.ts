@@ -29,6 +29,10 @@ export interface ModelClient {
   reviewFile(payload: ReviewPayload): Promise<FileReviewDraft>;
 }
 
+interface ClaudeFoundryClientOptions {
+  onVerbose?: (message: string) => void;
+}
+
 export function buildMessagesUrl(baseURL: string): string {
   const normalized = baseURL.replace(/\/+$/, "");
 
@@ -82,12 +86,19 @@ export class ClaudeFoundryClient implements ModelClient {
   private readonly messagesUrl: string;
   private readonly deploymentName: string;
   private readonly timeoutMs: number;
+  private readonly onVerbose: ((message: string) => void) | undefined;
 
-  constructor(baseURL: string, apiKey: string, deploymentName: string) {
+  constructor(
+    baseURL: string,
+    apiKey: string,
+    deploymentName: string,
+    options: ClaudeFoundryClientOptions = {}
+  ) {
     this.apiKey = apiKey;
     this.messagesUrl = buildMessagesUrl(baseURL);
     this.deploymentName = deploymentName;
     this.timeoutMs = 30000;
+    this.onVerbose = options.onVerbose;
   }
 
   async reviewFile(payload: ReviewPayload): Promise<FileReviewDraft> {
@@ -96,6 +107,7 @@ export class ClaudeFoundryClient implements ModelClient {
     try {
       return FileReviewDraftSchema.parse(JSON.parse(text));
     } catch {
+      this.onVerbose?.("Model returned invalid JSON on first attempt; retrying with repair prompt.");
       const repairedText = await this.runPrompt({
         prompt: `${payload.prompt}\n\nYour previous answer was not valid JSON for the requested schema. Return corrected JSON only.`,
         input: payload.input

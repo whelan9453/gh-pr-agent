@@ -28,6 +28,8 @@ After that, you can run:
 gh-pr-review https://github.com/OWNER/REPO/pull/123
 ```
 
+The CLI prints progress updates to `stderr` while the final review stays on `stdout`.
+
 For contributors who do not want a global command on `PATH`, the manual flow is:
 
 ```bash
@@ -88,6 +90,12 @@ Write JSON output:
 
 ```bash
 gh-pr-review https://github.com/OWNER/REPO/pull/123 --json-output review-output/pr-123.json
+```
+
+Show more detailed progress logs:
+
+```bash
+gh-pr-review https://github.com/OWNER/REPO/pull/123 --verbose
 ```
 
 Use a custom review prompt:

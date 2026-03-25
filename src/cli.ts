@@ -20,6 +20,10 @@ function readEnvSecret(name: string): string | undefined {
   return value ? value : undefined;
 }
 
+function writeProgress(message: string): void {
+  process.stderr.write(`${message}\n`);
+}
+
 async function promptHidden(question: string): Promise<string> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -75,6 +79,7 @@ export function buildProgram(): Command {
     .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
     .option("--prompt-file <path>", "Path to a review prompt file")
     .option("--json-output <path>", "Write structured JSON output to a file")
+    .option("--verbose", "Show detailed progress logs")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset");
 
@@ -94,6 +99,7 @@ export async function run(argv = process.argv): Promise<void> {
     model?: string;
     promptFile?: string;
     jsonOutput?: string;
+    verbose?: boolean;
     promptForGithubToken?: boolean;
     promptForAzureKey?: boolean;
   }>();
@@ -122,17 +128,36 @@ export async function run(argv = process.argv): Promise<void> {
     jsonOutput: options.jsonOutput
   });
 
+  writeProgress(`Starting review for ${prUrl}`);
+  writeProgress(`Using ${model} deployment preset.`);
+  if (options.verbose) {
+    writeProgress("Loading review prompt...");
+  }
   const prompt = await loadPrompt(config.promptFile);
   const pr = parsePullRequestUrl(prUrl);
+  if (options.verbose) {
+    writeProgress(`Resolved PR to ${pr.owner}/${pr.repo}#${pr.number}.`);
+  }
   const githubClient = new GitHubClient(config.githubToken, pr.apiBaseUrl);
   const modelClient = new ClaudeFoundryClient(
     config.azureFoundryBaseUrl,
     config.azureFoundryApiKey,
-    config.deploymentName
+    config.deploymentName,
+    options.verbose
+      ? {
+          onVerbose: writeProgress
+        }
+      : undefined
   );
-  const engine = new ReviewEngine(githubClient, modelClient, prompt);
+  const engine = new ReviewEngine(githubClient, modelClient, prompt, {
+    onProgress: writeProgress,
+    verbose: Boolean(options.verbose)
+  });
   const report = await engine.reviewPullRequest(pr);
 
+  if (options.verbose && config.jsonOutput) {
+    writeProgress(`Writing JSON report to ${path.resolve(config.jsonOutput)}.`);
+  }
   process.stdout.write(renderMarkdown(report));
   if (config.jsonOutput) {
     await writeJsonOutput(report, config.jsonOutput);

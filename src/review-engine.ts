@@ -5,22 +5,48 @@ import { ModelClient } from "./model-client.js";
 
 const MAX_PATCH_CHARS = 8000;
 const MAX_CONTEXT_CHARS = 4000;
+const MODEL_HEARTBEAT_MS = 10000;
+
+interface ReviewEngineOptions {
+  onProgress?: (message: string) => void;
+  verbose?: boolean;
+}
+
+function formatDuration(ms: number): string {
+  return `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s`;
+}
 
 export class ReviewEngine {
+  private readonly onProgress: ((message: string) => void) | undefined;
+  private readonly verbose: boolean;
+
   constructor(
     private readonly githubClient: GitHubClient,
     private readonly modelClient: ModelClient,
-    private readonly prompt: string
-  ) {}
+    private readonly prompt: string,
+    options: ReviewEngineOptions = {}
+  ) {
+    this.onProgress = options.onProgress;
+    this.verbose = options.verbose ?? false;
+  }
 
   async reviewPullRequest(pr: PullRequestRef): Promise<ReviewReport> {
+    const startedAt = Date.now();
+    this.emit("Fetching PR metadata...");
     const prInfo = await this.githubClient.getPullRequest(pr);
+    this.emit(`Loaded PR #${pr.number}: ${prInfo.title}`);
+    this.emit("Fetching changed files...");
     const files = await this.githubClient.listPullRequestFiles(pr);
+    this.emit(`Found ${files.length} changed file(s).`);
     const reviews: FileReview[] = [];
 
-    for (const file of files) {
-      reviews.push(await this.reviewFile(pr, prInfo, file));
+    for (const [index, file] of files.entries()) {
+      reviews.push(await this.reviewFile(pr, prInfo, file, index + 1, files.length));
     }
+
+    this.emit(
+      `Completed review in ${formatDuration(Date.now() - startedAt)}.`
+    );
 
     return {
       pullRequest: {
@@ -40,13 +66,21 @@ export class ReviewEngine {
   private async reviewFile(
     pr: PullRequestRef,
     prInfo: PullRequestInfo,
-    file: ChangedFile
+    file: ChangedFile,
+    fileIndex: number,
+    totalFiles: number
   ): Promise<FileReview> {
+    const startedAt = Date.now();
+    const prefix = `[${fileIndex}/${totalFiles}]`;
+
     if (process.env.GH_PR_AGENT_DEBUG === "1") {
       process.stderr.write(`review:start ${file.path}\n`);
     }
 
+    this.emit(`${prefix} Reviewing ${file.path}...`);
+
     if (!file.patch) {
+      this.emit(`${prefix} Skipped ${file.path} in ${formatDuration(Date.now() - startedAt)}.`);
       return {
         path: file.path,
         previousPath: file.previousPath,
@@ -63,23 +97,37 @@ export class ReviewEngine {
 
     const numberedPatchResult = buildNumberedPatch(file.patch);
     const patchResult = truncateText(numberedPatchResult.numberedPatch, MAX_PATCH_CHARS, "patch");
+    this.emitVerbose(`${prefix} Loading file context for ${file.path}.`);
     const content = file.status === "removed" ? null : await this.githubClient.getFileContent(file.contentsUrl);
     const contextResult = content
       ? buildNumberedContext(content, numberedPatchResult.changedNewLines, 8, MAX_CONTEXT_CHARS)
       : { context: "", truncated: false };
 
     const truncated = patchResult.truncated || contextResult.truncated;
+    if (truncated) {
+      this.emitVerbose(`${prefix} Truncated review payload for ${file.path}.`);
+    }
     const input = this.buildInput(pr, prInfo, file, patchResult.context, contextResult.context, truncated);
 
     try {
+      const heartbeat = setInterval(() => {
+        this.emit(
+          `${prefix} Still reviewing ${file.path}... ${formatDuration(Date.now() - startedAt)} elapsed.`
+        );
+      }, MODEL_HEARTBEAT_MS);
+
       const draft = await this.modelClient.reviewFile({
         prompt: this.prompt,
         input
-      });
+      }).finally(() => clearInterval(heartbeat));
 
       if (process.env.GH_PR_AGENT_DEBUG === "1") {
         process.stderr.write(`review:done ${file.path}\n`);
       }
+
+      this.emit(
+        `${prefix} Done ${file.path} in ${formatDuration(Date.now() - startedAt)} (${draft.issues.length} issue(s)).`
+      );
 
       return {
         path: file.path,
@@ -104,6 +152,8 @@ export class ReviewEngine {
         const message = error instanceof Error ? error.message : "Unknown model error";
         process.stderr.write(`review:error ${file.path} ${message}\n`);
       }
+      const message = error instanceof Error ? error.message : "Unknown model error";
+      this.emit(`${prefix} Failed ${file.path} in ${formatDuration(Date.now() - startedAt)}: ${message}`);
       return {
         path: file.path,
         previousPath: file.previousPath,
@@ -111,7 +161,7 @@ export class ReviewEngine {
         skipped: false,
         skipReason: null,
         reviewFailed: true,
-        reviewFailureReason: error instanceof Error ? error.message : "Unknown model error",
+        reviewFailureReason: message,
         truncated,
         summary: [],
         issues: []
@@ -165,5 +215,15 @@ export class ReviewEngine {
     );
 
     return parts.join("\n");
+  }
+
+  private emit(message: string): void {
+    this.onProgress?.(message);
+  }
+
+  private emitVerbose(message: string): void {
+    if (this.verbose) {
+      this.onProgress?.(message);
+    }
   }
 }
