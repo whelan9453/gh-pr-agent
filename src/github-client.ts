@@ -137,6 +137,29 @@ export class GitHubClient {
     }));
   }
 
+  async createReview(
+    pr: PullRequestRef,
+    commitId: string,
+    body: string,
+    inlineComments: Array<{ path: string; line: number; body: string }>
+  ): Promise<string> {
+    const response = await this.octokit.pulls.createReview({
+      owner: pr.owner,
+      repo: pr.repo,
+      pull_number: pr.number,
+      commit_id: commitId,
+      event: "COMMENT",
+      body,
+      comments: inlineComments.map((c) => ({
+        path: c.path,
+        line: c.line,
+        side: "RIGHT" as const,
+        body: c.body
+      }))
+    });
+    return response.data.html_url ?? pr.url;
+  }
+
   async getFileContent(contentsUrl: string | null): Promise<string | null> {
     if (!contentsUrl) {
       return null;
