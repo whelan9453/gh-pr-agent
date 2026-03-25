@@ -5,3 +5,4 @@ coverage/
 .env.local
 .DS_Store
 review-output/
+.gh-pr-agent/

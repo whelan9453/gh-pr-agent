@@ -88,3 +88,54 @@ export interface AppConfig {
   promptFile?: string;
   jsonOutput?: string;
 }
+
+// ── Interactive session types ─────────────────────────────────────────────
+
+export type SessionMode = "review" | "walkthrough";
+
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ReviewCursor {
+  mode: "review";
+  fileIndex: number;  // index into ReviewReport.files
+  issueIndex: number; // -1 = file summary; 0+ = specific issue
+}
+
+export interface WalkthroughCursor {
+  mode: "walkthrough";
+  fileIndex: number;       // index into walkthroughOrder
+  walkthroughOrder: string[]; // ordered file paths
+}
+
+export type SessionCursor = ReviewCursor | WalkthroughCursor;
+
+export interface FileMaterial {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  numberedPatch: string | null;  // output of buildNumberedPatch
+}
+
+export interface SessionArtifacts {
+  prInfo: PullRequestInfo;
+  files: FileMaterial[];
+  walkthroughOrder: string[];
+  reviewReport?: ReviewReport;  // only for review mode
+}
+
+export interface AppSession {
+  id: string;
+  mode: SessionMode;
+  prRef: PullRequestRef;
+  model: ModelPreset;
+  prTitle: string;
+  snapshotSha: string;
+  createdAt: string;
+  updatedAt: string;
+  cursor: SessionCursor;
+  messages: ConversationMessage[];
+}

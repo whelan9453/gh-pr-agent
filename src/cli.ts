@@ -14,6 +14,13 @@ import { ClaudeFoundryClient } from "./model-client.js";
 import { loadPrompt } from "./prompt-loader.js";
 import { renderMarkdown, writeJsonOutput } from "./renderers.js";
 import { ReviewEngine } from "./review-engine.js";
+import {
+  createWalkthroughSession,
+  createReviewSession,
+  runSessionRepl,
+  type InteractiveOptions
+} from "./interactive-session.js";
+import { loadSession } from "./session-store.js";
 
 function readEnvSecret(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -69,41 +76,62 @@ async function resolveSecret(
   return value;
 }
 
-export function buildProgram(): Command {
-  const program = new Command();
-
-  program
-    .name("gh-pr-review")
-    .description("Review GitHub pull requests with Claude on Azure Foundry")
-    .argument("<pr-url>", "GitHub pull request URL")
-    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
-    .option("--prompt-file <path>", "Path to a review prompt file")
-    .option("--json-output <path>", "Write structured JSON output to a file")
-    .option("--verbose", "Show detailed progress logs")
-    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
-    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset");
-
-  return program;
-}
-
-export async function run(argv = process.argv): Promise<void> {
-  const program = buildProgram();
-  await program.parseAsync(argv);
-
-  const prUrl = program.args[0];
-  if (!prUrl) {
-    throw new Error("Missing pull request URL");
+async function resolveInteractiveOptions(options: {
+  model?: string;
+  verbose?: boolean;
+  promptFile?: string;
+  promptForGithubToken?: boolean;
+  promptForAzureKey?: boolean;
+}): Promise<InteractiveOptions> {
+  const model = (options.model ?? "haiku") as ModelPreset;
+  if (model !== "sonnet" && model !== "haiku") {
+    throw new Error(`Unsupported model preset: ${model}`);
   }
 
-  const options = program.opts<{
+  const githubToken = await resolveSecret(
+    "GITHUB_TOKEN",
+    Boolean(options.promptForGithubToken),
+    "GitHub token"
+  );
+  const azureFoundryApiKey = await resolveSecret(
+    "AZURE_FOUNDRY_API_KEY",
+    Boolean(options.promptForAzureKey),
+    "Azure Foundry API key"
+  );
+
+  const config = resolveConfig({
+    model,
+    githubToken,
+    azureFoundryApiKey,
+    promptFile: undefined,
+    jsonOutput: undefined
+  });
+
+  const result: InteractiveOptions = {
+    model,
+    githubToken,
+    azureFoundryBaseUrl: config.azureFoundryBaseUrl,
+    azureFoundryApiKey,
+    deploymentName: config.deploymentName,
+    verbose: Boolean(options.verbose)
+  };
+  if (options.promptFile) {
+    result.promptFile = path.resolve(options.promptFile);
+  }
+  return result;
+}
+
+async function runOneShotReview(
+  prUrl: string,
+  options: {
     model?: string;
     promptFile?: string;
     jsonOutput?: string;
     verbose?: boolean;
     promptForGithubToken?: boolean;
     promptForAzureKey?: boolean;
-  }>();
-
+  }
+): Promise<void> {
   const model = (options.model ?? "haiku") as ModelPreset;
   if (model !== "sonnet" && model !== "haiku") {
     throw new Error(`Unsupported model preset: ${options.model}`);
@@ -162,6 +190,87 @@ export async function run(argv = process.argv): Promise<void> {
   if (config.jsonOutput) {
     await writeJsonOutput(report, config.jsonOutput);
   }
+}
+
+export function buildProgram(): Command {
+  const program = new Command();
+
+  program
+    .name("gh-pr-review")
+    .description("Review GitHub pull requests with Claude on Azure Foundry");
+
+  // ── Legacy one-shot mode (backward compat): gh-pr-review <pr-url> ───────
+  program
+    .argument("[pr-url]", "GitHub pull request URL (one-shot review mode)")
+    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
+    .option("--prompt-file <path>", "Path to a review prompt file")
+    .option("--json-output <path>", "Write structured JSON output to a file")
+    .option("--verbose", "Show detailed progress logs")
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .action(async (prUrl: string | undefined, options) => {
+      if (!prUrl) {
+        program.help();
+        return;
+      }
+      await runOneShotReview(prUrl, options);
+    });
+
+  // ── walkthrough <pr-url> ─────────────────────────────────────────────────
+  const walkthroughCmd = new Command("walkthrough")
+    .description("Start an interactive walkthrough session for a PR")
+    .argument("<pr-url>", "GitHub pull request URL")
+    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
+    .option("--prompt-file <path>", "Path to a custom prompt file")
+    .option("--verbose", "Show detailed progress logs")
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .action(async (prUrl: string, options) => {
+      const interactiveOpts = await resolveInteractiveOptions(options);
+      const session = await createWalkthroughSession(prUrl, interactiveOpts);
+      await runSessionRepl(session, interactiveOpts, true);
+    });
+
+  // ── review <pr-url> ──────────────────────────────────────────────────────
+  const reviewCmd = new Command("review")
+    .description("Start an interactive review session for a PR (with precompute)")
+    .argument("<pr-url>", "GitHub pull request URL")
+    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
+    .option("--prompt-file <path>", "Path to a custom prompt file")
+    .option("--verbose", "Show detailed progress logs")
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .action(async (prUrl: string, options) => {
+      const interactiveOpts = await resolveInteractiveOptions(options);
+      const session = await createReviewSession(prUrl, interactiveOpts);
+      await runSessionRepl(session, interactiveOpts, true);
+    });
+
+  // ── resume <session-id> ──────────────────────────────────────────────────
+  const resumeCmd = new Command("resume")
+    .description("Resume an existing interactive session")
+    .argument("<session-id>", "Session ID to resume")
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .action(async (sessionId: string, options) => {
+      const session = loadSession(sessionId);
+      const interactiveOpts = await resolveInteractiveOptions({
+        ...options,
+        model: session.model // use session's model, not CLI default
+      });
+      await runSessionRepl(session, interactiveOpts, false);
+    });
+
+  program.addCommand(walkthroughCmd);
+  program.addCommand(reviewCmd);
+  program.addCommand(resumeCmd);
+
+  return program;
+}
+
+export async function run(argv = process.argv): Promise<void> {
+  const program = buildProgram();
+  await program.parseAsync(argv);
 }
 
 const entrypoint = fileURLToPath(import.meta.url);
