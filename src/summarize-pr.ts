@@ -167,9 +167,9 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
   messages.push({ role: "assistant", content: raw });
 
   process.stdout.write("\n" + renderToTerminal(analysis) + "\n");
-  process.stdout.write("Commands: post — select comments to post | exit — quit\n");
+  process.stdout.write("Commands: post — comment | approve — approve PR | exit — quit\n");
 
-  const postComments = async (currentComments: SummaryComment[]): Promise<void> => {
+  const postComments = async (currentComments: SummaryComment[], event: "COMMENT" | "APPROVE" = "COMMENT"): Promise<void> => {
     if (currentComments.length === 0) {
       process.stdout.write("No comments to post.\n");
       return;
@@ -210,7 +210,8 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
       pr,
       prInfo.headSha,
       reviewBody,
-      validInline.map((c) => ({ path: c.path, line: c.line, body: c.body }))
+      validInline.map((c) => ({ path: c.path, line: c.line, body: c.body })),
+      event
     );
     process.stdout.write(`  Posted review: ${url}\n`);
   };
@@ -239,7 +240,13 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
 
     if (input.toLowerCase() === "post" || input.toLowerCase() === "send") {
       rl.close();
-      await postComments(latestComments);
+      await postComments(latestComments, "COMMENT");
+      break;
+    }
+
+    if (input.toLowerCase() === "approve") {
+      rl.close();
+      await postComments(latestComments, "APPROVE");
       break;
     }
 

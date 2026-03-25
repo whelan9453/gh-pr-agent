@@ -141,14 +141,15 @@ export class GitHubClient {
     pr: PullRequestRef,
     commitId: string,
     body: string,
-    inlineComments: Array<{ path: string; line: number; body: string }>
+    inlineComments: Array<{ path: string; line: number; body: string }>,
+    event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES" = "COMMENT"
   ): Promise<string> {
     const response = await this.octokit.pulls.createReview({
       owner: pr.owner,
       repo: pr.repo,
       pull_number: pr.number,
       commit_id: commitId,
-      event: "COMMENT",
+      event,
       body,
       comments: inlineComments.map((c) => ({
         path: c.path,
