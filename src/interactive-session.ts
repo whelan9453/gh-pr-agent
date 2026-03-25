@@ -136,7 +136,7 @@ function jumpWalkthroughCursor(cursor: WalkthroughCursor, filePath: string): Wal
 
 // ── PR context block ───────────────────────────────────────────────────────
 
-function buildPrContextBlock(prContext: PrContext): string {
+export function buildPrContextBlock(prContext: PrContext): string {
   const parts: string[] = [];
 
   if (prContext.description.trim()) {

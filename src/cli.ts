@@ -14,6 +14,7 @@ import {
   runSessionRepl,
   type InteractiveOptions
 } from "./interactive-session.js";
+import { summarizePr } from "./summarize-pr.js";
 import { loadSession } from "./session-store.js";
 
 function readEnvSecret(name: string): string | undefined {
@@ -164,7 +165,21 @@ function buildProgram(): Command {
       await runSessionRepl(session, interactiveOpts, false);
     });
 
+  // ── summary <pr-url> ─────────────────────────────────────────────────────
+  const summaryCmd = new Command("summary")
+    .description("Quickly surface major issues in a PR without a full walkthrough")
+    .argument("<pr-url>", "GitHub pull request URL")
+    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
+    .option("--verbose", "Show detailed progress logs")
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .action(async (prUrl: string, options) => {
+      const interactiveOpts = await resolveInteractiveOptions(options);
+      await summarizePr(prUrl, interactiveOpts);
+    });
+
   program.addCommand(walkthroughCmd);
+  program.addCommand(summaryCmd);
   program.addCommand(resumeCmd);
 
   return program;
