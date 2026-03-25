@@ -199,12 +199,10 @@ export function buildProgram(): Command {
     .name("gh-pr-review")
     .description("Review GitHub pull requests with Claude on Azure Foundry");
 
-  // ── Legacy one-shot mode (backward compat): gh-pr-review <pr-url> ───────
+  // ── Default: interactive review mode ────────────────────────────────────
   program
-    .argument("[pr-url]", "GitHub pull request URL (one-shot review mode)")
+    .argument("[pr-url]", "GitHub pull request URL")
     .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
-    .option("--prompt-file <path>", "Path to a review prompt file")
-    .option("--json-output <path>", "Write structured JSON output to a file")
     .option("--verbose", "Show detailed progress logs")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
@@ -213,6 +211,22 @@ export function buildProgram(): Command {
         program.help();
         return;
       }
+      const interactiveOpts = await resolveInteractiveOptions(options);
+      const session = await createReviewSession(prUrl, interactiveOpts);
+      await runSessionRepl(session, interactiveOpts, true);
+    });
+
+  // ── one-shot <pr-url>: non-interactive output (for automation/json) ──────
+  const oneShotCmd = new Command("one-shot")
+    .description("Non-interactive review: print markdown and optional JSON output")
+    .argument("<pr-url>", "GitHub pull request URL")
+    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
+    .option("--prompt-file <path>", "Path to a review prompt file")
+    .option("--json-output <path>", "Write structured JSON output to a file")
+    .option("--verbose", "Show detailed progress logs")
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .action(async (prUrl: string, options) => {
       await runOneShotReview(prUrl, options);
     });
 
@@ -261,6 +275,7 @@ export function buildProgram(): Command {
       await runSessionRepl(session, interactiveOpts, false);
     });
 
+  program.addCommand(oneShotCmd);
   program.addCommand(walkthroughCmd);
   program.addCommand(reviewCmd);
   program.addCommand(resumeCmd);
