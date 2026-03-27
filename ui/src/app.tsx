@@ -16,6 +16,7 @@ import {
   persistReviewSummary,
   runAiReview,
   saveDraft,
+  sendAnnotationChat,
   sendChatMessage,
   submitReview
 } from "./api";
@@ -37,6 +38,26 @@ interface SelectionState {
   endRowKey: string;
 }
 
+interface AnnotationCardState {
+  expanded: boolean;
+  thread: Array<{ role: "user" | "assistant"; content: string }>;
+  commentBody: string;
+  sending: boolean;
+  addingDraft: boolean;
+  draftError: string | null;
+  draftSuccess: boolean;
+}
+
+interface AnnotationHandlers {
+  getState: (key: string, defaultBody: string) => AnnotationCardState;
+  onJump: (annotation: AiReviewAnnotation) => void;
+  onToggle: (key: string, defaultBody: string) => void;
+  onSendMessage: (key: string, annotation: AiReviewAnnotation, thread: Array<{ role: "user" | "assistant"; content: string }>, message: string) => Promise<void>;
+
+  onCommentChange: (key: string, defaultBody: string, body: string) => void;
+  onAddDraft: (key: string, annotation: AiReviewAnnotation, commentBody: string) => Promise<void>;
+}
+
 interface ReviewWorkspaceProps {
   session: SessionOverviewResponse;
   fileData: FileResponse | null;
@@ -56,6 +77,8 @@ interface ReviewWorkspaceProps {
   onSubmitReview: (body: string) => Promise<void>;
   onRunAiReview: () => Promise<void>;
   onSendChatMessage: (message: string) => Promise<void>;
+  onSendAnnotationMessage: (context: string, body: string, path: string | null, thread: Array<{ role: "user" | "assistant"; content: string }>, message: string) => Promise<string>;
+  onAddAnnotationDraft: (annotation: AiReviewAnnotation, body: string) => Promise<void>;
 }
 
 export default function App(): JSX.Element {
@@ -234,6 +257,41 @@ export default function App(): JSX.Element {
     }
   }
 
+  async function handleSendAnnotationMessage(
+    context: string,
+    body: string,
+    path: string | null,
+    thread: Array<{ role: "user" | "assistant"; content: string }>,
+    message: string
+  ): Promise<string> {
+    if (!sessionId) throw new Error("No session");
+    const result = await sendAnnotationChat(sessionId, context, body, path, thread, message);
+    return result.reply;
+  }
+
+  async function handleAddAnnotationDraft(annotation: AiReviewAnnotation, body: string): Promise<void> {
+    if (!sessionId || !annotation.path || annotation.line == null) return;
+    const data = await loadFile(sessionId, annotation.path);
+    let row = data.file.diffRows.find(
+      (r) => r.type !== "hunk" && r.rightSelectable && r.newLine === annotation.line
+    );
+    let side: ReviewCommentSide = "RIGHT";
+    if (!row) {
+      row = data.file.diffRows.find(
+        (r) => r.type !== "hunk" && r.leftSelectable && r.oldLine === annotation.line
+      );
+      side = "LEFT";
+    }
+    if (!row) throw new Error(`無法在 diff 中找到第 ${annotation.line} 行`);
+    await saveDraft(sessionId, { path: annotation.path, body, side, startRowKey: row.key, endRowKey: row.key });
+    // Refresh session (updates draftCount badges in file list + allDrafts in sidebar)
+    // Only refresh fileData if we're already viewing that file — avoids double-load flash
+    await Promise.all([
+      refreshSession(sessionId),
+      selectedPath === annotation.path ? refreshFile(sessionId, annotation.path) : Promise.resolve()
+    ]);
+  }
+
   async function handleSendChatMessage(message: string): Promise<void> {
     if (!sessionId) return;
     try {
@@ -321,6 +379,8 @@ export default function App(): JSX.Element {
           onSubmitReview={handleSubmitReview}
           onRunAiReview={handleRunAiReview}
           onSendChatMessage={handleSendChatMessage}
+          onSendAnnotationMessage={handleSendAnnotationMessage}
+          onAddAnnotationDraft={handleAddAnnotationDraft}
         />
       ) : (
         <section className="empty-panel">
@@ -352,6 +412,57 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const vResizeStartHeights = useRef<[number, number]>([0, 0]);
 
   const pendingScrollTarget = useRef<{ path: string; line: number } | null>(null);
+  const [annotationStates, setAnnotationStates] = useState<Map<string, AnnotationCardState>>(new Map());
+
+  function getAnnotationState(key: string, defaultBody: string): AnnotationCardState {
+    return annotationStates.get(key) ?? { expanded: false, thread: [], commentBody: defaultBody, sending: false, addingDraft: false, draftError: null, draftSuccess: false };
+  }
+
+  function patchAnnotation(key: string, defaultBody: string, patch: Partial<AnnotationCardState>): void {
+    setAnnotationStates((prev) => {
+      const current = prev.get(key) ?? { expanded: false, thread: [], commentBody: defaultBody, sending: false, addingDraft: false, draftError: null, draftSuccess: false };
+      return new Map(prev).set(key, { ...current, ...patch });
+    });
+  }
+
+  const annotationHandlers: AnnotationHandlers = {
+    getState: getAnnotationState,
+    onJump: handleAnnotationClick,
+    onToggle(key, defaultBody) {
+      const current = getAnnotationState(key, defaultBody);
+      patchAnnotation(key, defaultBody, {
+        expanded: !current.expanded,
+        commentBody: current.commentBody || defaultBody
+      });
+    },
+    async onSendMessage(key, annotation, thread, message) {
+      patchAnnotation(key, annotation.body, { sending: true });
+      try {
+        const reply = await props.onSendAnnotationMessage(annotation.context, annotation.body, annotation.path, thread, message);
+        patchAnnotation(key, annotation.body, {
+          sending: false,
+          thread: [...thread, { role: "user", content: message }, { role: "assistant", content: reply }]
+        });
+      } catch {
+        patchAnnotation(key, annotation.body, { sending: false });
+      }
+    },
+    onCommentChange(key, defaultBody, body) {
+      patchAnnotation(key, defaultBody, { commentBody: body });
+    },
+    async onAddDraft(key, annotation, commentBody) {
+      patchAnnotation(key, annotation.body, { addingDraft: true, draftError: null, draftSuccess: false });
+      try {
+        await props.onAddAnnotationDraft(annotation, commentBody);
+        patchAnnotation(key, annotation.body, { addingDraft: false, draftSuccess: true });
+      } catch (e) {
+        patchAnnotation(key, annotation.body, {
+          addingDraft: false,
+          draftError: e instanceof Error ? e.message : "新增留言失敗"
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     setSelection(null);
@@ -435,10 +546,21 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   }
 
   const file = props.fileData?.file ?? null;
-  const drafts = props.fileData?.drafts ?? [];
+  const fileDrafts = props.fileData?.drafts ?? [];   // current file only — for inline diff display
+  const allDrafts = props.session.drafts;             // all files — for sidebar + confirm sheet
   const selectionSummary = file && selection ? describeSelection(file, selection) : null;
 
   const commentsByRow = useMemo(() => buildCommentIndex(file), [file]);
+
+  const draftsByEndKey = useMemo(() => {
+    const map = new Map<string, typeof fileDrafts>();
+    for (const draft of fileDrafts) {
+      const existing = map.get(draft.endRowKey) ?? [];
+      existing.push(draft);
+      map.set(draft.endRowKey, existing);
+    }
+    return map;
+  }, [fileDrafts]);
 
   const selectionEndKey = useMemo(() => {
     if (!selection || !file) return null;
@@ -649,6 +771,25 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                     );
                   }
 
+                  for (const draft of draftsByEndKey.get(row.key) ?? []) {
+                    elements.push(
+                      <div key={`draft-${draft.id}`} className="diff-inline-draft">
+                        <div className="inline-draft-header">
+                          <span className="inline-draft-badge">待送出留言</span>
+                          <span className="inline-draft-loc">{formatDraftRange(draft)}</span>
+                        </div>
+                        <p className="inline-draft-body">{draft.body}</p>
+                        <button
+                          type="button"
+                          className="ghost inline-draft-delete"
+                          onClick={() => void props.onDeleteDraft(draft.id)}
+                        >
+                          刪除
+                        </button>
+                      </div>
+                    );
+                  }
+
                   if (!dragging && selectionSummary && row.key === selectionEndKey) {
                     elements.push(
                       <div key="inline-form" className="diff-inline-form">
@@ -723,7 +864,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             messages={props.chatMessages}
             sending={props.sendingChat}
             onSend={props.onSendChatMessage}
-            onAnnotationClick={handleAnnotationClick}
+            annotationHandlers={annotationHandlers}
           />
         </div>
 
@@ -736,10 +877,10 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           <div className="sidebar-card">
             <div className="sidebar-title-row">
               <h3>待送出留言</h3>
-              <span>{drafts.length}</span>
+              <span>{allDrafts.length}</span>
             </div>
             <ul className="draft-list">
-              {drafts.map((draft) => (
+              {allDrafts.map((draft) => (
                 <li key={draft.id} className="draft-item">
                   <p className="draft-title">{formatDraftRange(draft)}</p>
                   <p>{draft.body}</p>
@@ -768,7 +909,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             />
             <button
               type="button"
-              disabled={props.submittingReview || (drafts.length === 0 && !props.reviewBody.trim())}
+              disabled={props.submittingReview || (allDrafts.length === 0 && !props.reviewBody.trim())}
               onClick={() => setConfirmOpen(true)}
             >
               {props.submittingReview ? "送出中..." : "送出 Review"}
@@ -780,10 +921,10 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           <section className="confirm-sheet" role="dialog" aria-modal="true">
             <div className="confirm-card">
               <p className="eyebrow">Ready to Post</p>
-              <h3>{drafts.length} inline comments</h3>
+              <h3>{allDrafts.length} inline comments</h3>
               <p className="meta-line">{props.reviewBody.trim() || "No review summary"}</p>
               <ul className="draft-list compact">
-                {drafts.map((draft) => (
+                {allDrafts.map((draft) => (
                   <li key={draft.id}>{formatDraftRange(draft)}</li>
                 ))}
               </ul>
@@ -813,7 +954,7 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   sending: boolean;
   onSend: (message: string) => Promise<void>;
-  onAnnotationClick: (annotation: AiReviewAnnotation) => void;
+  annotationHandlers: AnnotationHandlers;
 }
 
 function ChatPanel(props: ChatPanelProps): JSX.Element {
@@ -845,22 +986,16 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
                 className={`chat-bubble ${msg.role}`}
                 dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }}
               />
-              {msg.annotations && msg.annotations.filter((a) => a.path).length > 0 ? (
-                <div className="annotation-chips">
-                  <span className="annotation-chips-label">跳轉到程式碼</span>
-                  {msg.annotations.filter((a) => a.path).map((a, j) => (
-                    <button
+              {msg.annotations && msg.annotations.length > 0 ? (
+                <div className="annotation-cards-list">
+                  {msg.annotations.map((a, j) => (
+                    <AnnotationCard
                       key={j}
-                      type="button"
-                      className="annotation-chip"
-                      onClick={() => props.onAnnotationClick(a)}
-                    >
-                      <span className="annotation-chip-index">{j + 1}</span>
-                      <span className="annotation-chip-body">
-                        <span className="annotation-chip-context">{a.context}</span>
-                        <span className="annotation-chip-loc">{a.path}{a.line != null ? `:${a.line}` : ""}</span>
-                      </span>
-                    </button>
+                      msgIdx={i}
+                      annIdx={j}
+                      annotation={a}
+                      handlers={props.annotationHandlers}
+                    />
                   ))}
                 </div>
               ) : null}
@@ -886,6 +1021,120 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
           {props.sending ? "傳送中..." : "傳送"}
         </button>
       </form>
+    </div>
+  );
+}
+
+function AnnotationCard({
+  msgIdx,
+  annIdx,
+  annotation,
+  handlers
+}: {
+  msgIdx: number;
+  annIdx: number;
+  annotation: AiReviewAnnotation;
+  handlers: AnnotationHandlers;
+}): JSX.Element {
+  const cardKey = `${msgIdx}-${annIdx}`;
+  const state = handlers.getState(cardKey, annotation.body);
+  const [chatInput, setChatInput] = useState("");
+  const hasLocation = annotation.path != null;
+  const severityLabel = annotation.severity === "must-fix" ? "必須修正" : "建議改善";
+
+  async function handleSendChat(e?: React.FormEvent): Promise<void> {
+    e?.preventDefault();
+    const msg = chatInput.trim();
+    if (!msg || state.sending) return;
+    setChatInput("");
+    await handlers.onSendMessage(cardKey, annotation, state.thread, msg);
+  }
+
+  return (
+    <div className={`annotation-card annotation-${annotation.severity}`}>
+      <div className="annotation-card-header">
+        <span className={`severity-badge severity-${annotation.severity}`}>{severityLabel}</span>
+        <span className="annotation-card-index">{annIdx + 1}</span>
+        <span className="annotation-card-context">{annotation.context}</span>
+      </div>
+      {annotation.description ? (
+        <p className="annotation-card-desc">{annotation.description}</p>
+      ) : null}
+      <div className="annotation-card-actions">
+        {hasLocation ? (
+          <button
+            type="button"
+            className="annotation-jump-btn"
+            onClick={() => handlers.onJump(annotation)}
+          >
+            {annotation.path}{annotation.line != null ? `:${annotation.line}` : ""} →
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="annotation-toggle-btn"
+          onClick={() => handlers.onToggle(cardKey, annotation.body)}
+        >
+          {state.expanded ? "▲ 收起" : "▼ 討論 / 新增留言"}
+        </button>
+      </div>
+
+      {state.expanded ? (
+        <div className="annotation-card-expanded">
+          {state.thread.length > 0 ? (
+            <div className="annotation-thread">
+              {state.thread.map((m, k) => (
+                <div key={k} className={`annotation-thread-msg ${m.role}`}>
+                  <div dangerouslySetInnerHTML={{ __html: marked(m.content) as string }} />
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <form className="annotation-chat-form" onSubmit={(e) => void handleSendChat(e)}>
+            <textarea
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="針對這個問題提問..."
+              rows={2}
+              disabled={state.sending}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSendChat();
+                }
+              }}
+            />
+            <button type="submit" disabled={!chatInput.trim() || state.sending}>
+              {state.sending ? "傳送中..." : "傳送"}
+            </button>
+          </form>
+
+          <div className="annotation-draft-section">
+            <p className="annotation-draft-label">留言草稿</p>
+            <textarea
+              value={state.commentBody}
+              onChange={(e) => handlers.onCommentChange(cardKey, annotation.body, e.target.value)}
+              placeholder="留言內容..."
+              rows={3}
+            />
+            <button
+              type="button"
+              className="annotation-add-draft-btn"
+              disabled={!hasLocation || !state.commentBody.trim() || state.addingDraft}
+              onClick={() => void handlers.onAddDraft(cardKey, annotation, state.commentBody)}
+            >
+              {state.addingDraft ? "新增中..." : "新增留言"}
+            </button>
+            {state.draftSuccess ? (
+              <p className="annotation-draft-feedback success">已新增留言，可在「待送出留言」查看</p>
+            ) : null}
+            {state.draftError ? (
+              <p className="annotation-draft-feedback error">{state.draftError}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

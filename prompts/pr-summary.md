@@ -83,11 +83,13 @@ After the 結論, output a single fenced JSON block — no heading, no label, ju
 
 ```json
 [
-  { "context": "<one phrase>", "body": "<English comment to post on PR>", "path": "src/foo.ts", "line": 42 }
+  { "context": "<one phrase>", "severity": "must-fix", "description": "<one sentence in Traditional Chinese summarising the issue>", "body": "<English comment to post on PR>", "path": "src/foo.ts", "line": 42 }
 ]
 ```
 
 - One entry per issue from 必須修正 and 建議改善.
+- `severity`: `"must-fix"` for 必須修正 items, `"should-fix"` for 建議改善 items.
+- `description`: one concise sentence in Traditional Chinese — this is shown in the UI card next to the jump link.
 - `path` and `line`: use when the issue refers to a specific file and line in the diff (new-file line numbers). Otherwise `null`.
 - If there are no issues, output `[]`.
 

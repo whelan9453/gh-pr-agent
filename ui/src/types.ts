@@ -98,6 +98,8 @@ export interface FileMaterial {
 
 export interface AiReviewAnnotation {
   context: string;
+  severity: "must-fix" | "should-fix";
+  description: string;
   body: string;
   path: string | null;
   line: number | null;

@@ -10,6 +10,7 @@ import {
   getFileMaterial,
   getSessionOverview,
   runAiReview,
+  sendAnnotationChatMessage,
   sendChatMessage,
   setReviewSummary,
   submitReview,
@@ -56,7 +57,8 @@ export interface UiServerService {
     sessionId: string,
     payload: ReviewSubmissionPayload
   ): Promise<{ url: string; drafts: DraftComment[] }>;
-  runAiReview(sessionId: string): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; body: string; path: string | null; line: number | null }> }>;
+  runAiReview(sessionId: string): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }>;
+  sendAnnotationChat(sessionId: string, context: string, body: string, path: string | null, thread: Array<{ role: "user" | "assistant"; content: string }>, message: string): Promise<{ reply: string }>;
   sendChatMessage(sessionId: string, message: string): Promise<{ reply: string }>;
 }
 
@@ -96,6 +98,9 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
     },
     async runAiReview(sessionId) {
       return runAiReview(sessionId, client);
+    },
+    async sendAnnotationChat(sessionId, context, body, path, thread, message) {
+      return sendAnnotationChatMessage(sessionId, context, body, path, thread, message, client);
     },
     async sendChatMessage(sessionId, message) {
       return sendChatMessage(sessionId, message, client);
@@ -170,6 +175,26 @@ export function registerApiRoutes(app: Express, service: UiServerService): void 
   app.post("/api/sessions/:id/ai-review", async (req, res) => {
     await handleAsync(req, res, async () => {
       res.json(await service.runAiReview(req.params.id ?? ""));
+    });
+  });
+
+  app.post("/api/sessions/:id/annotation-chat", async (req, res) => {
+    await handleAsync(req, res, async () => {
+      const payload = z.object({
+        context: z.string().min(1),
+        body: z.string(),
+        path: z.string().nullable(),
+        thread: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
+        message: z.string().min(1)
+      }).parse(req.body);
+      res.json(await service.sendAnnotationChat(
+        req.params.id ?? "",
+        payload.context,
+        payload.body,
+        payload.path,
+        payload.thread,
+        payload.message
+      ));
     });
   });
 

@@ -521,6 +521,54 @@ button {
 .diff-row-unified.added .unified-code { color: var(--added-fg); }
 .diff-row-unified.deleted .unified-code { color: var(--deleted-fg); }
 
+.diff-inline-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border);
+  border-bottom: 2px solid #c08a20;
+  grid-column: 1 / -1;
+}
+
+.inline-draft-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inline-draft-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: rgba(192, 138, 32, 0.15);
+  color: #9a6e00;
+}
+
+.inline-draft-loc {
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  color: var(--muted);
+}
+
+.inline-draft-body {
+  font-size: 0.8rem;
+  margin: 0;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inline-draft-delete {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+}
+
 .diff-inline-form {
   display: flex;
   flex-direction: column;
@@ -930,76 +978,232 @@ input[type="text"]:focus {
   align-self: flex-end;
 }
 
-.annotation-chips {
+.annotation-cards-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
   margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border-muted);
 }
 
-.annotation-chips-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin-bottom: 0.125rem;
-}
+/* ─── Annotation Card ──────────────────────────────────────────── */
 
-.annotation-chip {
+.annotation-card {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.3rem 0.5rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem;
   background: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: border-color 0.1s, background 0.1s;
+  font-size: 0.8125rem;
 }
 
-.annotation-chip:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+.annotation-card.annotation-must-fix {
+  border-left: 3px solid #e05252;
 }
 
-.annotation-chip-index {
-  font-size: 0.7rem;
+.annotation-card.annotation-should-fix {
+  border-left: 3px solid #c08a20;
+}
+
+.annotation-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.severity-badge {
+  font-size: 0.625rem;
   font-weight: 700;
-  color: var(--accent);
-  min-width: 1rem;
-  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
   flex-shrink: 0;
 }
 
-.annotation-chip-body {
+.severity-badge.severity-must-fix {
+  background: rgba(224, 82, 82, 0.15);
+  color: #c03030;
+}
+
+.severity-badge.severity-should-fix {
+  background: rgba(192, 138, 32, 0.15);
+  color: #9a6e00;
+}
+
+.annotation-card-index {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.annotation-card-context {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-card-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.annotation-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.annotation-jump-btn {
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.annotation-jump-btn:hover { opacity: 0.75; }
+
+.annotation-toggle-btn {
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.annotation-toggle-btn:hover { color: var(--ink); }
+
+/* ─── Annotation Expanded Body ─────────────────────────────────── */
+
+.annotation-card-expanded {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-muted);
+}
+
+.annotation-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.annotation-thread-msg {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius);
+  overflow-wrap: break-word;
+  word-break: break-word;
   min-width: 0;
 }
 
-.annotation-chip-context {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.annotation-thread-msg.user {
+  background: var(--accent-soft);
+  align-self: flex-end;
+  max-width: 90%;
 }
 
-.annotation-chip-loc {
-  font-size: 0.7rem;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.annotation-thread-msg.assistant {
+  background: var(--bg-base);
+  border: 1px solid var(--border-muted);
 }
+
+.annotation-thread-msg p { margin: 0; }
+
+.annotation-thread-msg pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.annotation-thread-msg code {
+  white-space: pre-wrap;
+}
+
+.annotation-chat-form {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.annotation-chat-form textarea {
+  flex: 1;
+  font-size: 0.78rem;
+  padding: 0.3rem 0.4rem;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+  color: var(--ink);
+}
+
+.annotation-chat-form button {
+  font-size: 0.75rem;
+  padding: 0.3rem 0.6rem;
+  white-space: nowrap;
+}
+
+.annotation-draft-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-muted);
+}
+
+.annotation-draft-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.annotation-draft-section textarea {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.4rem;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+  color: var(--ink);
+}
+
+.annotation-add-draft-btn {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.annotation-draft-feedback {
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.annotation-draft-feedback.success { color: #4caf50; }
+.annotation-draft-feedback.error { color: #e05252; }
 
 .chat-form {
   display: grid;

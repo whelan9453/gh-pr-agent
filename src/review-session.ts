@@ -263,10 +263,44 @@ export async function submitReview(
   return { url, artifacts };
 }
 
+export async function sendAnnotationChatMessage(
+  sessionId: string,
+  annotationContext: string,
+  annotationBody: string,
+  annotationPath: string | null,
+  thread: Array<{ role: "user" | "assistant"; content: string }>,
+  userMessage: string,
+  client: FoundryConversationClient
+): Promise<{ reply: string }> {
+  const artifacts = loadArtifacts(sessionId);
+  let fileContext = "";
+  if (annotationPath) {
+    const file = artifacts.files.find((f) => f.path === annotationPath);
+    if (file?.numberedPatch) {
+      fileContext = `\n\n## File: ${annotationPath}\n\`\`\`diff\n${file.numberedPatch}\n\`\`\``;
+    }
+  }
+  const systemPrompt = [
+    "You are a senior code reviewer answering questions about a specific issue found in a pull request.",
+    "",
+    `Issue: ${annotationContext}`,
+    `Details: ${annotationBody}`,
+    fileContext,
+    "",
+    "Answer concisely and technically. If asked to write a GitHub review comment, write it in English, professional and specific."
+  ].join("\n");
+  const messages: ConversationMessage[] = [
+    ...thread,
+    { role: "user", content: userMessage }
+  ];
+  const reply = await client.send(systemPrompt, messages, 1500);
+  return { reply };
+}
+
 export async function runAiReview(
   sessionId: string,
   client: FoundryConversationClient
-): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; body: string; path: string | null; line: number | null }> }> {
+): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }> {
   const session = loadSession(sessionId);
   const artifacts = loadArtifacts(sessionId);
   const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
@@ -277,29 +311,6 @@ export async function runAiReview(
 
   const { analysis, comments } = parseAiComments(raw);
 
-  let draftCount = 0;
-  for (const comment of comments) {
-    if (!comment.path || !comment.line) continue;
-    const file = artifacts.files.find((f) => f.path === comment.path);
-    if (!file) continue;
-    const row = file.diffRows.find(
-      (r) => r.type !== "hunk" && r.rightSelectable && r.newLine === comment.line
-    );
-    if (!row) continue;
-    try {
-      upsertDraftComment(sessionId, {
-        path: comment.path,
-        body: comment.body,
-        side: "RIGHT",
-        startRowKey: row.key,
-        endRowKey: row.key
-      });
-      draftCount++;
-    } catch {
-      // skip comments that can't be mapped to a valid diff range
-    }
-  }
-
   const updated = loadArtifacts(sessionId);
   updated.chatHistory = [
     { role: "user", content: userMessage },
@@ -307,7 +318,7 @@ export async function runAiReview(
   ];
   saveArtifacts(sessionId, updated);
 
-  return { analysis, draftCount, comments };
+  return { analysis, draftCount: 0, comments };
 }
 
 export async function sendChatMessage(
@@ -362,14 +373,26 @@ function buildAiReviewMessage(session: AppSession, artifacts: SessionArtifacts):
   ].join("\n");
 }
 
+function stripIssueSections(text: string): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let inIssueSection = false;
+  for (const line of lines) {
+    if (/^###\s*(必須修正|建議改善)/.test(line)) { inIssueSection = true; continue; }
+    if (/^###/.test(line)) { inIssueSection = false; }
+    if (!inIssueSection) result.push(line);
+  }
+  return result.join("\n").trim();
+}
+
 function parseAiComments(raw: string): {
   analysis: string;
-  comments: Array<{ context: string; body: string; path: string | null; line: number | null }>;
+  comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }>;
 } {
   const match = /```json\s*([\s\S]*?)```\s*$/.exec(raw);
   if (!match) return { analysis: raw, comments: [] };
 
-  const analysis = raw.slice(0, match.index).trimEnd();
+  const analysis = stripIssueSections(raw.slice(0, match.index).trimEnd());
   try {
     const parsed = JSON.parse(match[1] ?? "[]") as unknown;
     if (!Array.isArray(parsed)) return { analysis, comments: [] };
@@ -379,6 +402,8 @@ function parseAiComments(raw: string): {
       if (typeof r["context"] !== "string" || typeof r["body"] !== "string") return [];
       return [{
         context: r["context"],
+        severity: r["severity"] === "should-fix" ? "should-fix" as const : "must-fix" as const,
+        description: typeof r["description"] === "string" ? r["description"] : "",
         body: r["body"],
         path: typeof r["path"] === "string" ? r["path"] : null,
         line: typeof r["line"] === "number" ? r["line"] : null

@@ -79,6 +79,20 @@ export function runAiReview(
   });
 }
 
+export function sendAnnotationChat(
+  sessionId: string,
+  context: string,
+  body: string,
+  path: string | null,
+  thread: Array<{ role: "user" | "assistant"; content: string }>,
+  message: string
+): Promise<{ reply: string }> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/annotation-chat`, {
+    method: "POST",
+    body: JSON.stringify({ context, body, path, thread, message })
+  });
+}
+
 export function sendChatMessage(
   sessionId: string,
   message: string
