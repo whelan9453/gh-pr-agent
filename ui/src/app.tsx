@@ -1,3 +1,4 @@
+import { marked } from "marked";
 import React, {
   startTransition,
   useDeferredValue,
@@ -684,9 +685,11 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
       ) : (
         <div className="chat-messages">
           {props.messages.map((msg, i) => (
-            <div key={i} className={`chat-bubble ${msg.role}`}>
-              <pre>{msg.content}</pre>
-            </div>
+            <div
+              key={i}
+              className={`chat-bubble ${msg.role}`}
+              dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }}
+            />
           ))}
           <div ref={bottomRef} />
         </div>

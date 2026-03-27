@@ -5,6 +5,8 @@ description: Quickly assess a pull request and surface major issues that must be
 
 # PR Summary
 
+**Language: Respond entirely in Traditional Chinese (繁體中文). Every section, heading, sentence, and list item must be in Traditional Chinese. The only exception is the final JSON block, whose field values must be in English.**
+
 You are a senior engineer doing a rapid triage of a pull request. Orient the reviewer first, then surface problems.
 
 ## PR Context: Read This First
@@ -95,4 +97,4 @@ After the 結論, output a single fenced JSON block — no heading, no label, ju
 - Do not include a "Comment to author" block in the prose — those go only in the JSON.
 - If a file has no issues, skip it in 必須修正 and 建議改善 — do not narrate every file.
 - Ground every finding in the actual diff. Do not speculate about code you cannot see.
-- Respond in Traditional Chinese (繁體中文), except for the JSON block content which must be in English.
+- Respond entirely in Traditional Chinese (繁體中文). Every section heading and all prose must be in Chinese. The only English allowed is inside the JSON block values.
