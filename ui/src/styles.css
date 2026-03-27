@@ -666,7 +666,8 @@ button {
 
 .review-panel {
   background: var(--bg-canvas);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -680,9 +681,8 @@ button {
 }
 
 .review-section.chat-section {
-  flex: 1;
-  min-height: 80px;
-  flex-shrink: 1;
+  flex-shrink: 0;
+  min-height: calc(100% - 110px);
 }
 
 .v-resize-handle {
