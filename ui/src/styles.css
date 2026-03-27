@@ -405,6 +405,38 @@ button {
   flex-shrink: 0;
 }
 
+.diff-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.diff-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.diff-mode-toggle button {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.diff-mode-toggle button:hover {
+  background: var(--bg-inset);
+  color: var(--ink);
+}
+
+.diff-mode-toggle button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .diff-header h3 {
   font-size: 0.8125rem;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
@@ -429,6 +461,65 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
+
+/* ─── Unified Diff ──────────────────────────────────────────────── */
+
+.diff-row-unified {
+  display: grid;
+  grid-template-columns: 3rem 3rem 1fr;
+  min-height: 1.375rem;
+}
+
+.unified-old-no,
+.unified-new-no {
+  padding: 0 0.5rem;
+  text-align: right;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  color: var(--muted);
+  background: var(--bg-subtle);
+  border-right: 1px solid var(--border-muted);
+  user-select: none;
+  line-height: 1.375rem;
+}
+
+.diff-row-unified.added .unified-old-no,
+.diff-row-unified.added .unified-new-no {
+  background: color-mix(in srgb, var(--added-bg) 60%, var(--bg-subtle));
+  color: var(--added-fg);
+}
+
+.diff-row-unified.deleted .unified-old-no,
+.diff-row-unified.deleted .unified-new-no {
+  background: color-mix(in srgb, var(--deleted-bg) 60%, var(--bg-subtle));
+  color: var(--deleted-fg);
+}
+
+.unified-code {
+  padding: 0 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre;
+  overflow: hidden;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  width: 100%;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+}
+
+.unified-code.selectable { cursor: pointer; }
+.unified-code.selected { background: var(--selected-bg); }
+.unified-code.commented { outline: 1px solid var(--commented-accent); }
+
+.diff-row-unified.added { background: var(--added-bg); }
+.diff-row-unified.deleted { background: var(--deleted-bg); }
+.diff-row-unified.added .unified-code { color: var(--added-fg); }
+.diff-row-unified.deleted .unified-code { color: var(--deleted-fg); }
 
 .diff-inline-form {
   display: flex;

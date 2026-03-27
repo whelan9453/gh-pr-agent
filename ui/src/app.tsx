@@ -331,6 +331,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const [dragging, setDragging] = useState<SelectionState | null>(null);
   const [draftBody, setDraftBody] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [diffMode, setDiffMode] = useState<"split" | "unified">("split");
 
   const [leftWidth, setLeftWidth] = useState(280);
   const [rightWidth, setRightWidth] = useState(360);
@@ -351,7 +352,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
     setAnchor(null);
     setDragging(null);
     setDraftBody("");
-  }, [props.selectedPath]);
+  }, [props.selectedPath, diffMode]);
 
   useEffect(() => {
     if (!dragging) {
@@ -546,13 +547,19 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                 <h3>{file.path}</h3>
                 {file.previousPath ? <p className="meta-line">renamed from {file.previousPath}</p> : null}
               </div>
-              <div className="diff-totals">
-                <span>Base {file.baseRef.slice(0, 7)}</span>
-                <span>Head {file.headRef.slice(0, 7)}</span>
+              <div className="diff-header-right">
+                <div className="diff-totals">
+                  <span>Base {file.baseRef.slice(0, 7)}</span>
+                  <span>Head {file.headRef.slice(0, 7)}</span>
+                </div>
+                <div className="diff-mode-toggle">
+                  <button type="button" className={diffMode === "split" ? "active" : ""} onClick={() => setDiffMode("split")}>Split</button>
+                  <button type="button" className={diffMode === "unified" ? "active" : ""} onClick={() => setDiffMode("unified")}>Unified</button>
+                </div>
               </div>
             </header>
 
-            <div className="diff-table" role="table" aria-label="Split diff">
+            <div className="diff-table" role="table" aria-label={diffMode === "split" ? "Split diff" : "Unified diff"}>
               {file.diffRows.length === 0 ? (
                 <div className="diff-empty">這個檔案沒有可顯示的 textual diff。</div>
               ) : (
@@ -565,33 +572,74 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                     ];
                   }
 
-                  const leftSelected = selection ? rowIsSelected(file, row, "LEFT", selection) : false;
-                  const rightSelected = selection ? rowIsSelected(file, row, "RIGHT", selection) : false;
-                  const leftComments = commentsByRow.get(`LEFT:${row.key}`) ?? [];
-                  const rightComments = commentsByRow.get(`RIGHT:${row.key}`) ?? [];
+                  const elements: JSX.Element[] = [];
 
-                  const elements: JSX.Element[] = [
-                    <div className="diff-row" key={row.key} id={`diff-row-${row.key}`}>
-                      <DiffCell
-                        row={row}
-                        side="LEFT"
-                        selected={leftSelected}
-                        commented={leftComments.length > 0}
-                        comments={leftComments}
-                        onMouseDown={(shiftKey) => handleRowPress(row, "LEFT", shiftKey)}
-                        onMouseEnter={() => handleRowHover(row, "LEFT")}
-                      />
-                      <DiffCell
-                        row={row}
-                        side="RIGHT"
-                        selected={rightSelected}
-                        commented={rightComments.length > 0}
-                        comments={rightComments}
-                        onMouseDown={(shiftKey) => handleRowPress(row, "RIGHT", shiftKey)}
-                        onMouseEnter={() => handleRowHover(row, "RIGHT")}
-                      />
-                    </div>
-                  ];
+                  if (diffMode === "split") {
+                    const leftSelected = selection ? rowIsSelected(file, row, "LEFT", selection) : false;
+                    const rightSelected = selection ? rowIsSelected(file, row, "RIGHT", selection) : false;
+                    const leftComments = commentsByRow.get(`LEFT:${row.key}`) ?? [];
+                    const rightComments = commentsByRow.get(`RIGHT:${row.key}`) ?? [];
+                    elements.push(
+                      <div className="diff-row" key={row.key} id={`diff-row-${row.key}`}>
+                        <DiffCell
+                          row={row}
+                          side="LEFT"
+                          selected={leftSelected}
+                          commented={leftComments.length > 0}
+                          comments={leftComments}
+                          onMouseDown={(shiftKey) => handleRowPress(row, "LEFT", shiftKey)}
+                          onMouseEnter={() => handleRowHover(row, "LEFT")}
+                        />
+                        <DiffCell
+                          row={row}
+                          side="RIGHT"
+                          selected={rightSelected}
+                          commented={rightComments.length > 0}
+                          comments={rightComments}
+                          onMouseDown={(shiftKey) => handleRowPress(row, "RIGHT", shiftKey)}
+                          onMouseEnter={() => handleRowHover(row, "RIGHT")}
+                        />
+                      </div>
+                    );
+                  } else {
+                    const isDel = row.type === "del";
+                    const text = isDel ? row.leftText : row.rightText;
+                    const selectable = !isDel && row.rightSelectable;
+                    const selected = selectable && selection ? rowIsSelected(file, row, "RIGHT", selection) : false;
+                    const comments = commentsByRow.get(`RIGHT:${row.key}`) ?? [];
+                    elements.push(
+                      <div
+                        key={row.key}
+                        id={`diff-row-${row.key}`}
+                        className={[
+                          "diff-row-unified",
+                          row.type === "add" ? "added" : row.type === "del" ? "deleted" : "",
+                        ].filter(Boolean).join(" ")}
+                      >
+                        <span className="unified-old-no">{isDel ? (row.oldLine ?? "") : ""}</span>
+                        <span className="unified-new-no">{!isDel ? (row.newLine ?? "") : ""}</span>
+                        <button
+                          type="button"
+                          className={["unified-code", selectable ? "selectable" : "", selected ? "selected" : "", comments.length > 0 ? "commented" : ""].filter(Boolean).join(" ")}
+                          disabled={!selectable}
+                          aria-label={`RIGHT line ${row.newLine ?? row.oldLine ?? "blank"}`}
+                          onMouseDown={(e) => { if (selectable) handleRowPress(row, "RIGHT", e.shiftKey); }}
+                          onMouseEnter={() => { if (selectable) handleRowHover(row, "RIGHT"); }}
+                        >
+                          <code>{text || " "}</code>
+                          {comments.length > 0 ? (
+                            <span className="comment-stack">
+                              {comments.map((c) => (
+                                <span key={c.id} className="existing-comment">
+                                  <strong>@{c.author}</strong> {c.body}
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                        </button>
+                      </div>
+                    );
+                  }
 
                   if (!dragging && selectionSummary && row.key === selectionEndKey) {
                     elements.push(
