@@ -19,7 +19,7 @@ import {
   sendChatMessage,
   submitReview
 } from "./api";
-import type { ChatMessage } from "./api";
+import type { AiReviewAnnotation, ChatMessage } from "./api";
 import type {
   DiffRow,
   DraftPayload,
@@ -213,7 +213,7 @@ export default function App(): JSX.Element {
       setRunningAiReview(true);
       setError(null);
       const result = await runAiReview(sessionId);
-      setChatMessages((prev) => [...prev, { role: "assistant", content: result.analysis }]);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: result.analysis, annotations: result.comments }]);
       await refreshSession(sessionId);
       if (selectedPath) await refreshFile(sessionId, selectedPath);
     } catch (error) {
@@ -332,6 +332,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const resizing = useRef<"left" | "right" | null>(null);
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
+  const pendingScrollTarget = useRef<{ path: string; line: number } | null>(null);
 
   useEffect(() => {
     setSelection(null);
@@ -369,6 +370,35 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
       window.removeEventListener("mouseup", onMouseUp);
     };
   }, []);
+
+  useEffect(() => {
+    const target = pendingScrollTarget.current;
+    if (!target || !props.fileData || props.fileData.file.path !== target.path) return;
+    const row = props.fileData.file.diffRows.find(
+      (r) => r.type !== "hunk" && r.rightSelectable && r.newLine === target.line
+    );
+    if (row) {
+      document.getElementById(`diff-row-${row.key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    pendingScrollTarget.current = null;
+  }, [props.fileData]);
+
+  function handleAnnotationClick(annotation: AiReviewAnnotation): void {
+    if (!annotation.path || annotation.line == null) return;
+    const alreadyLoaded =
+      props.fileData?.file.path === annotation.path;
+    if (alreadyLoaded) {
+      const row = props.fileData!.file.diffRows.find(
+        (r) => r.type !== "hunk" && r.rightSelectable && r.newLine === annotation.line
+      );
+      if (row) {
+        document.getElementById(`diff-row-${row.key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    } else {
+      pendingScrollTarget.current = { path: annotation.path, line: annotation.line };
+      props.onSelectPath(annotation.path);
+    }
+  }
 
   const file = props.fileData?.file ?? null;
   const drafts = props.fileData?.drafts ?? [];
@@ -499,7 +529,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                   const rightComments = commentsByRow.get(`RIGHT:${row.key}`) ?? [];
 
                   return (
-                    <div className="diff-row" key={row.key}>
+                    <div className="diff-row" key={row.key} id={`diff-row-${row.key}`}>
                       <DiffCell
                         row={row}
                         side="LEFT"
@@ -620,6 +650,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           messages={props.chatMessages}
           sending={props.sendingChat}
           onSend={props.onSendChatMessage}
+          onAnnotationClick={handleAnnotationClick}
         />
 
         {confirmOpen ? (
@@ -659,6 +690,7 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   sending: boolean;
   onSend: (message: string) => Promise<void>;
+  onAnnotationClick: (annotation: AiReviewAnnotation) => void;
 }
 
 function ChatPanel(props: ChatPanelProps): JSX.Element {
@@ -685,11 +717,27 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
       ) : (
         <div className="chat-messages">
           {props.messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`chat-bubble ${msg.role}`}
-              dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }}
-            />
+            <div key={i} className="chat-message-group">
+              <div
+                className={`chat-bubble ${msg.role}`}
+                dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }}
+              />
+              {msg.annotations && msg.annotations.length > 0 ? (
+                <div className="annotation-chips">
+                  {msg.annotations.filter((a) => a.path).map((a, j) => (
+                    <button
+                      key={j}
+                      type="button"
+                      className="annotation-chip"
+                      onClick={() => props.onAnnotationClick(a)}
+                    >
+                      <span className="annotation-chip-context">{a.context}</span>
+                      <span className="annotation-chip-loc">{a.path}{a.line != null ? `:${a.line}` : ""}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ))}
           <div ref={bottomRef} />
         </div>

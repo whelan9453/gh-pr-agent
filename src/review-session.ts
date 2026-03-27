@@ -266,7 +266,7 @@ export async function submitReview(
 export async function runAiReview(
   sessionId: string,
   client: FoundryConversationClient
-): Promise<{ analysis: string; draftCount: number }> {
+): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; body: string; path: string | null; line: number | null }> }> {
   const session = loadSession(sessionId);
   const artifacts = loadArtifacts(sessionId);
   const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
@@ -307,7 +307,7 @@ export async function runAiReview(
   ];
   saveArtifacts(sessionId, updated);
 
-  return { analysis, draftCount };
+  return { analysis, draftCount, comments };
 }
 
 export async function sendChatMessage(

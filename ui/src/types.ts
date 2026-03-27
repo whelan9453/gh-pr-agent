@@ -96,9 +96,17 @@ export interface FileMaterial {
   existingComments: ExistingInlineComment[];
 }
 
+export interface AiReviewAnnotation {
+  context: string;
+  body: string;
+  path: string | null;
+  line: number | null;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  annotations?: AiReviewAnnotation[];
 }
 
 export interface SessionOverviewResponse {

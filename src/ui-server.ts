@@ -56,7 +56,7 @@ export interface UiServerService {
     sessionId: string,
     payload: ReviewSubmissionPayload
   ): Promise<{ url: string; drafts: DraftComment[] }>;
-  runAiReview(sessionId: string): Promise<{ analysis: string; draftCount: number }>;
+  runAiReview(sessionId: string): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; body: string; path: string | null; line: number | null }> }>;
   sendChatMessage(sessionId: string, message: string): Promise<{ reply: string }>;
 }
 

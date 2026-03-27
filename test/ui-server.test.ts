@@ -133,7 +133,7 @@ describe("createUiApp", () => {
       deleteDraft: vi.fn(),
       setReviewSummary: vi.fn(),
       submitReview: vi.fn().mockResolvedValue({ url: "https://github.com/review/1", drafts: [] }),
-      runAiReview: vi.fn().mockResolvedValue({ analysis: "LGTM", draftCount: 0 }),
+      runAiReview: vi.fn().mockResolvedValue({ analysis: "LGTM", draftCount: 0, comments: [] }),
       sendChatMessage: vi.fn().mockResolvedValue({ reply: "ok" })
     };
     const app = createUiApp({ service, staticDir: makeStaticDir() });
