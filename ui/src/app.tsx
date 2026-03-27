@@ -633,6 +633,13 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           </button>
         </div>
 
+        <ChatPanel
+          messages={props.chatMessages}
+          sending={props.sendingChat}
+          onSend={props.onSendChatMessage}
+          onAnnotationClick={handleAnnotationClick}
+        />
+
         <div className="sidebar-card">
           <div className="sidebar-title-row">
             <h3>待送出留言</h3>
@@ -650,13 +657,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             ))}
           </ul>
         </div>
-
-        <ChatPanel
-          messages={props.chatMessages}
-          sending={props.sendingChat}
-          onSend={props.onSendChatMessage}
-          onAnnotationClick={handleAnnotationClick}
-        />
 
         <div className="sidebar-card">
           <p className="eyebrow">Review Summary</p>
