@@ -8,14 +8,15 @@
     "gh-pr-review": "./dist/src/cli.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && mkdir -p dist/prompts && cp prompts/*.md dist/prompts/",
-    "dev": "tsx src/cli.ts",
-    "setup-local": "npm install && npm run build && npm link",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "build":     "tsc -p tsconfig.json && vite build && mkdir -p dist/prompts && cp prompts/*.md dist/prompts/",
+    "prepare":   "npm run build",
+    "dev":       "tsx --watch src/dev-ui-server.ts & vite --config vite.config.ts",
+    "start":     "node dist/src/cli.js ui",
+    "test":      "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p ui/tsconfig.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
@@ -23,16 +24,29 @@
     "cli-highlight": "^2.1.11",
     "commander": "^14.0.0",
     "dotenv": "^17.2.3",
+    "express": "^4.21.2",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "node-fetch": "^3.3.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/express": "^5.0.3",
     "@types/marked-terminal": "^6.1.1",
     "@types/node": "^24.3.0",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@types/supertest": "^6.0.3",
+    "@vitejs/plugin-react": "^5.0.4",
+    "jsdom": "^27.0.0",
+    "supertest": "^7.1.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2",
+    "vite": "^7.1.10",
     "vitest": "^4.1.1"
   }
 }

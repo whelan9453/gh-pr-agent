@@ -1,4 +1,4 @@
-import { ModelPreset, type AppConfig } from "./types.js";
+import type { AppConfig, ModelPreset } from "./types.js";
 
 interface ResolveConfigOptions {
   model: ModelPreset;
@@ -34,5 +34,3 @@ export function resolveConfig(options: ResolveConfigOptions): AppConfig {
     deploymentName: resolveDeploymentName(options.model)
   };
 }
-
-export { ModelPreset };

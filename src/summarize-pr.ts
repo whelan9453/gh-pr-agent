@@ -198,7 +198,7 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
       pr,
       prInfo.headSha,
       reviewBody,
-      validInline.map((c) => ({ path: c.path, line: c.line, body: c.body })),
+      validInline.map((c) => ({ path: c.path, line: c.line, side: "RIGHT", body: c.body })),
       event
     );
     process.stdout.write(`  Posted review: ${url}\n`);

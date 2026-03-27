@@ -3,27 +3,19 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadPrompt } from "./prompt-loader.js";
 import { renderToTerminal } from "./terminal-renderer.js";
-import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
-import { buildNumberedPatch } from "./diff-line-mapper.js";
 import { FoundryConversationClient } from "./conversation-client.js";
 import { parseCommand } from "./command-parser.js";
-import { buildWalkthroughOrder } from "./walkthrough-order.js";
 import { buildAsciiTree } from "./ascii-tree.js";
-import {
-  generateSessionId,
-  saveSession,
-  loadArtifacts,
-  saveArtifacts
-} from "./session-store.js";
+import { loadArtifacts, saveSession } from "./session-store.js";
+import { createSavedSession } from "./review-session.js";
 import type {
   AppSession,
   SessionArtifacts,
-  FileMaterial,
   PrContext,
   WalkthroughCursor,
   ConversationMessage
 } from "./types.js";
-import type { ModelPreset } from "./config.js";
+import type { ModelPreset } from "./types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -51,66 +43,13 @@ export async function createWalkthroughSession(
   prUrl: string,
   opts: InteractiveOptions
 ): Promise<AppSession> {
-  const pr = parsePullRequestUrl(prUrl);
-  const github = new GitHubClient(opts.githubToken, pr.apiBaseUrl);
-
   writeProgress("Fetching PR metadata and comments...");
-  const [prInfo, changedFiles, issueComments, reviews, reviewComments] = await Promise.all([
-    github.getPullRequest(pr),
-    github.listPullRequestFiles(pr),
-    github.listIssueComments(pr),
-    github.listReviews(pr),
-    github.listReviewComments(pr)
-  ]);
-  writeProgress(`Loaded PR #${pr.number}: ${prInfo.title}`);
-  writeProgress(`Found ${changedFiles.length} changed file(s), ${reviews.length} review(s), ${issueComments.length + reviewComments.length} comment(s).`);
-
-  const prContext: PrContext = {
-    description: prInfo.body,
-    issueComments,
-    reviews,
-    reviewComments
-  };
-
-  writeProgress("Building file materials...");
-  const files: FileMaterial[] = changedFiles.map((f) => ({
-    path: f.path,
-    status: f.status,
-    additions: f.additions,
-    deletions: f.deletions,
-    numberedPatch: f.patch ? buildNumberedPatch(f.patch).numberedPatch : null
-  }));
-
-  const walkthroughOrder = buildWalkthroughOrder(files.map((f) => f.path));
-
-  const artifacts: SessionArtifacts = { prInfo, prContext, files, walkthroughOrder };
-
-  const id = generateSessionId();
-  const now = new Date().toISOString();
-
-  const cursor: WalkthroughCursor = {
-    mode: "walkthrough",
-    fileIndex: 0,
-    walkthroughOrder
-  };
-
-  const session: AppSession = {
-    id,
-    mode: "walkthrough",
-    prRef: pr,
-    model: opts.model,
-    prTitle: prInfo.title,
-    snapshotSha: prInfo.headSha,
-    createdAt: now,
-    updatedAt: now,
-    cursor,
-    messages: []
-  };
-
-  // Atomically save: artifacts first, then session
-  saveArtifacts(id, artifacts);
-  saveSession(session);
-
+  const session = await createSavedSession(prUrl, opts.githubToken, opts.model, "walkthrough");
+  const artifacts = loadArtifacts(session.id);
+  writeProgress(`Loaded PR #${session.prRef.number}: ${session.prTitle}`);
+  writeProgress(
+    `Found ${artifacts.files.length} changed file(s), ${artifacts.prContext.reviews.length} review(s), ${artifacts.prContext.issueComments.length + artifacts.prContext.reviewComments.length} comment(s).`
+  );
   return session;
 }
 

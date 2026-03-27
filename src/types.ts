@@ -1,4 +1,6 @@
 export type ModelPreset = "sonnet" | "haiku";
+export type ReviewCommentSide = "LEFT" | "RIGHT";
+export type DiffRowType = "hunk" | "context" | "add" | "del";
 
 export interface PullRequestRef {
   host: string;
@@ -15,6 +17,7 @@ export interface PullRequestInfo {
   state: string;
   author: string;
   base: string;
+  baseSha: string;
   head: string;
   headSha: string;
   additions: number;
@@ -34,7 +37,6 @@ export interface ChangedFile {
   blobUrl: string | null;
 }
 
-
 export interface AppConfig {
   githubToken: string;
   azureFoundryBaseUrl: string;
@@ -52,16 +54,70 @@ export interface ConversationMessage {
 
 export interface WalkthroughCursor {
   mode: "walkthrough";
-  fileIndex: number;       // index into walkthroughOrder
+  fileIndex: number;
   walkthroughOrder: string[]; // ordered file paths
+}
+
+export interface DiffRow {
+  key: string;
+  hunkIndex: number;
+  type: DiffRowType;
+  header: string | null;
+  oldLine: number | null;
+  newLine: number | null;
+  leftText: string;
+  rightText: string;
+  leftSelectable: boolean;
+  rightSelectable: boolean;
+}
+
+export interface ExistingInlineComment {
+  id: number;
+  author: string;
+  path: string;
+  body: string;
+  createdAt: string;
+  line: number | null;
+  side: ReviewCommentSide | null;
+  startLine: number | null;
+  startSide: ReviewCommentSide | null;
+  replyToId: number | null;
+}
+
+export interface DraftComment {
+  id: string;
+  path: string;
+  body: string;
+  side: ReviewCommentSide;
+  line: number;
+  startLine: number | null;
+  startSide: ReviewCommentSide | null;
+  startRowKey: string;
+  endRowKey: string;
+  hunkIndex: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewSubmissionPayload {
+  body: string;
+  event?: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 }
 
 export interface FileMaterial {
   path: string;
+  previousPath: string | null;
   status: string;
   additions: number;
   deletions: number;
-  numberedPatch: string | null;  // output of buildNumberedPatch
+  baseRef: string;
+  headRef: string;
+  patch: string | null;
+  numberedPatch: string | null;
+  baseContent: string | null;
+  headContent: string | null;
+  diffRows: DiffRow[];
+  existingComments: ExistingInlineComment[];
 }
 
 export interface PrIssueComment {
@@ -78,9 +134,14 @@ export interface PrReview {
 }
 
 export interface PrReviewComment {
+  id: number;
   author: string;
   path: string;
   line: number | null;
+  side: ReviewCommentSide | null;
+  startLine: number | null;
+  startSide: ReviewCommentSide | null;
+  replyToId: number | null;
   body: string;
   createdAt: string;
 }
@@ -97,11 +158,13 @@ export interface SessionArtifacts {
   prContext: PrContext;
   files: FileMaterial[];
   walkthroughOrder: string[];
+  drafts: DraftComment[];
+  reviewSummary: string;
 }
 
 export interface AppSession {
   id: string;
-  mode: "walkthrough";
+  mode: "walkthrough" | "ui-review";
   prRef: PullRequestRef;
   model: ModelPreset;
   prTitle: string;

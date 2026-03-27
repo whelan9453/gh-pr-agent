@@ -7,13 +7,44 @@ describe("buildNumberedPatch", () => {
     const patch = `@@ -1,3 +1,4 @@
  line one
  line two
- line three
+-line three
++line three updated
 +line four`;
     const result = buildNumberedPatch(patch);
     expect(result.numberedPatch).toContain("[new:1]  line one");
+    expect(result.numberedPatch).toContain("[new:3] +line three updated");
     expect(result.numberedPatch).toContain("[new:4] +line four");
+    expect(result.validOldLines).toEqual(new Set([1, 2, 3]));
     expect(result.validNewLines).toEqual(new Set([1, 2, 3, 4]));
-    expect(result.changedNewLines).toEqual(new Set([4]));
+    expect(result.changedNewLines).toEqual(new Set([3, 4]));
+    expect(result.diffRows).toEqual([
+      expect.objectContaining({ type: "hunk", key: "h0-header" }),
+      expect.objectContaining({
+        type: "context",
+        oldLine: 1,
+        newLine: 1,
+        leftSelectable: true,
+        rightSelectable: true
+      }),
+      expect.objectContaining({
+        type: "context",
+        oldLine: 2,
+        newLine: 2
+      }),
+      expect.objectContaining({
+        type: "del",
+        oldLine: 3,
+        newLine: 3,
+        leftText: "line three",
+        rightText: "line three updated"
+      }),
+      expect.objectContaining({
+        type: "add",
+        oldLine: null,
+        newLine: 4,
+        rightText: "line four"
+      })
+    ]);
   });
 });
 

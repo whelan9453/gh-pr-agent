@@ -9,7 +9,7 @@ loadDotenv({ path: join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".e
 
 import { Command } from "commander";
 
-import { ModelPreset, resolveConfig } from "./config.js";
+import { resolveConfig } from "./config.js";
 import {
   createWalkthroughSession,
   runSessionRepl,
@@ -17,6 +17,8 @@ import {
 } from "./interactive-session.js";
 import { summarizePr } from "./summarize-pr.js";
 import { loadSession } from "./session-store.js";
+import { startUiServer } from "./ui-server.js";
+import type { ModelPreset } from "./types.js";
 
 function readEnvSecret(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -112,6 +114,20 @@ async function resolveInteractiveOptions(options: {
   return result;
 }
 
+async function resolveUiOptions(options: {
+  model?: string;
+  promptForGithubToken?: boolean;
+}): Promise<{ model: ModelPreset; githubToken: string }> {
+  return {
+    model: parseModelPreset(options.model),
+    githubToken: await resolveSecret(
+      "GITHUB_TOKEN",
+      Boolean(options.promptForGithubToken),
+      "GitHub token"
+    )
+  };
+}
+
 function buildProgram(): Command {
   const program = new Command();
 
@@ -159,11 +175,29 @@ function buildProgram(): Command {
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
     .action(async (sessionId: string, options) => {
       const session = loadSession(sessionId);
+      if (session.mode !== "walkthrough") {
+        throw new Error(`Session ${sessionId} is a ${session.mode} session and cannot be resumed in the REPL.`);
+      }
       const interactiveOpts = await resolveInteractiveOptions({
         ...options,
         model: session.model
       });
       await runSessionRepl(session, interactiveOpts, false);
+    });
+
+  const uiCmd = new Command("ui")
+    .description("Start the local PR review web UI")
+    .argument("[pr-url]", "GitHub pull request URL")
+    .option("--model <preset>", "Stored model label for the review session", "haiku")
+    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .action(async (prUrl: string | undefined, options) => {
+      const uiOpts = await resolveUiOptions(options);
+      const url = await startUiServer({
+        githubToken: uiOpts.githubToken,
+        model: uiOpts.model,
+        ...(prUrl ? { initialPrUrl: prUrl } : {})
+      });
+      process.stdout.write(`PR review UI ready at ${url}\n`);
     });
 
   // ── summary <pr-url> ─────────────────────────────────────────────────────
@@ -182,6 +216,7 @@ function buildProgram(): Command {
   program.addCommand(walkthroughCmd);
   program.addCommand(summaryCmd);
   program.addCommand(resumeCmd);
+  program.addCommand(uiCmd);
 
   return program;
 }

@@ -7,7 +7,8 @@ import {
   PullRequestRef,
   PrIssueComment,
   PrReview,
-  PrReviewComment
+  PrReviewComment,
+  ReviewCommentSide
 } from "./types.js";
 
 const PR_URL_RE =
@@ -63,6 +64,7 @@ export class GitHubClient {
       state: response.data.state ?? "",
       author: response.data.user?.login ?? "",
       base: response.data.base.ref,
+      baseSha: response.data.base.sha,
       head: response.data.head.ref,
       headSha: response.data.head.sha,
       additions: response.data.additions ?? 0,
@@ -129,9 +131,14 @@ export class GitHubClient {
       per_page: 100
     });
     return comments.map((c) => ({
+      id: c.id,
       author: c.user?.login ?? "unknown",
       path: c.path,
       line: c.line ?? c.original_line ?? null,
+      side: normalizeReviewCommentSide(c.side),
+      startLine: c.start_line ?? c.original_start_line ?? null,
+      startSide: normalizeReviewCommentSide(c.start_side),
+      replyToId: c.in_reply_to_id ?? null,
       body: c.body,
       createdAt: c.created_at
     }));
@@ -141,7 +148,14 @@ export class GitHubClient {
     pr: PullRequestRef,
     commitId: string,
     body: string,
-    inlineComments: Array<{ path: string; line: number; body: string }>,
+    inlineComments: Array<{
+      path: string;
+      line: number;
+      side: ReviewCommentSide;
+      body: string;
+      startLine?: number | null;
+      startSide?: ReviewCommentSide | null;
+    }>,
     event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES" = "COMMENT"
   ): Promise<string> {
     const response = await this.octokit.pulls.createReview({
@@ -154,11 +168,41 @@ export class GitHubClient {
       comments: inlineComments.map((c) => ({
         path: c.path,
         line: c.line,
-        side: "RIGHT" as const,
-        body: c.body
+        side: c.side,
+        body: c.body,
+        ...(c.startLine ? { start_line: c.startLine } : {}),
+        ...(c.startSide ? { start_side: c.startSide } : {})
       }))
     });
     return response.data.html_url ?? pr.url;
+  }
+
+  async getRepoFileContent(
+    pr: PullRequestRef,
+    filePath: string,
+    ref: string
+  ): Promise<string | null> {
+    try {
+      const response = await this.octokit.repos.getContent({
+        owner: pr.owner,
+        repo: pr.repo,
+        path: filePath,
+        ref
+      });
+      const payload = response.data;
+      if (Array.isArray(payload)) {
+        return null;
+      }
+      if (payload.type !== "file" || !payload.content || payload.encoding !== "base64") {
+        return null;
+      }
+      return Buffer.from(payload.content, "base64").toString("utf8");
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async getFileContent(contentsUrl: string | null): Promise<string | null> {
@@ -179,4 +223,15 @@ export class GitHubClient {
 
     return Buffer.from(payload.content, "base64").toString("utf8");
   }
+}
+
+function normalizeReviewCommentSide(raw: string | null | undefined): ReviewCommentSide | null {
+  if (raw === "LEFT" || raw === "RIGHT") {
+    return raw;
+  }
+  return null;
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "status" in error && error.status === 404;
 }

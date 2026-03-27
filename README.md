@@ -8,10 +8,11 @@
 - Use Azure Foundry Claude deployments
 - Generate per-file change highlights and possible issues with line numbers
 - Save structured JSON output for future GitHub comment automation
+- Open a local PR review web UI with split diff, draft comments, and GitHub review submission
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22 LTS or 24 LTS
 - A GitHub PAT with access to the target private repository
 - An Azure Foundry resource with a Claude deployment
 
@@ -36,6 +37,14 @@ For contributors who do not want a global command on `PATH`, the manual flow is:
 npm install
 npm run build
 node dist/src/cli.js https://github.com/OWNER/REPO/pull/123
+```
+
+Useful local scripts:
+
+```bash
+npm run ui       # build + launch the local web UI
+npm run dev:cli  # run the CLI directly from source
+npm run dev:ui   # run the frontend dev server only
 ```
 
 For local use, the fastest setup is:
@@ -85,6 +94,20 @@ Choose a different deployment preset:
 gh-pr-review https://github.com/OWNER/REPO/pull/123 --model haiku
 gh-pr-review https://github.com/OWNER/REPO/pull/123 --model sonnet
 ```
+
+Launch the local review UI:
+
+```bash
+gh-pr-review ui
+```
+
+Or open the UI with a PR URL prefilled:
+
+```bash
+gh-pr-review ui https://github.com/OWNER/REPO/pull/123
+```
+
+The UI opens in your browser, caches PR review data under `.gh-pr-agent/sessions`, lets you create local draft comments on diff ranges, and posts the final review back to GitHub in one submission.
 
 Write JSON output:
 
