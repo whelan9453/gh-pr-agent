@@ -1,4 +1,4 @@
-import type { DraftComment, DraftPayload, FileResponse, SessionOverviewResponse } from "./types";
+import type { ChatMessage, DraftComment, DraftPayload, FileResponse, SessionOverviewResponse } from "./types";
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -70,3 +70,24 @@ export function submitReview(
     body: JSON.stringify({ body, event })
   });
 }
+
+export function runAiReview(
+  sessionId: string
+): Promise<{ analysis: string; draftCount: number }> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/ai-review`, {
+    method: "POST"
+  });
+}
+
+export function sendChatMessage(
+  sessionId: string,
+  message: string
+): Promise<{ reply: string }> {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/chat`, {
+    method: "POST",
+    body: JSON.stringify({ message })
+  });
+}
+
+// Re-export ChatMessage so app.tsx can import from one place
+export type { ChatMessage };

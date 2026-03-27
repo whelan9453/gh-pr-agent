@@ -50,9 +50,10 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
 }
 
 h1, h2, h3, h4 {
@@ -78,9 +79,10 @@ button {
 /* ─── App Shell ─────────────────────────────────────────────────── */
 
 .app-shell {
-  display: grid;
-  gap: 0;
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ─── Top Bar ───────────────────────────────────────────────────── */
@@ -195,6 +197,10 @@ button {
 /* ─── Empty Panel ───────────────────────────────────────────────── */
 
 .empty-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 3rem 1.25rem;
   text-align: center;
   color: var(--muted);
@@ -204,24 +210,37 @@ button {
 /* ─── Workspace ─────────────────────────────────────────────────── */
 
 .workspace {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
-  align-items: start;
+  display: flex;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.resize-handle {
+  width: 4px;
+  flex-shrink: 0;
+  background: var(--border);
+  cursor: col-resize;
+  transition: background 0.1s;
+  position: relative;
+  z-index: 10;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+  background: var(--accent);
 }
 
 /* ─── Sidebar (left: file list) ─────────────────────────────────── */
 
 .sidebar {
-  border-right: 1px solid var(--border);
   background: var(--bg-canvas);
-  position: sticky;
-  top: 0;
-  max-height: 100vh;
   overflow-y: auto;
-  align-self: start;
+  overflow-x: hidden;
   display: grid;
   gap: 0;
+  align-content: start;
+  flex-shrink: 0;
 }
 
 .sidebar-card {
@@ -366,9 +385,10 @@ button {
 
 .diff-panel {
   background: var(--bg-canvas);
-  border-right: 1px solid var(--border);
-  min-height: calc(100vh - 48px);
+  overflow-y: auto;
   overflow-x: auto;
+  flex: 1;
+  min-width: 0;
 }
 
 .diff-header {
@@ -382,6 +402,7 @@ button {
   position: sticky;
   top: 0;
   z-index: 1;
+  flex-shrink: 0;
 }
 
 .diff-header h3 {
@@ -525,13 +546,12 @@ button {
 
 .review-panel {
   background: var(--bg-canvas);
-  position: sticky;
-  top: 0;
-  max-height: 100vh;
   overflow-y: auto;
-  align-self: start;
+  overflow-x: hidden;
   display: grid;
   gap: 0;
+  align-content: start;
+  flex-shrink: 0;
 }
 
 .review-panel .sidebar-card {
@@ -641,6 +661,55 @@ input[type="text"]:focus {
   border-color: var(--danger);
 }
 
+/* ─── Chat Panel ────────────────────────────────────────────────── */
+
+.chat-card {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.chat-bubble {
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  max-width: 100%;
+}
+
+.chat-bubble pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  margin: 0;
+}
+
+.chat-bubble.assistant {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+
+.chat-bubble.user {
+  background: var(--accent-soft);
+  border: 1px solid rgba(56, 139, 253, 0.25);
+  color: var(--ink);
+  align-self: flex-end;
+}
+
+.chat-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
 /* ─── Confirm Sheet ─────────────────────────────────────────────── */
 
 .confirm-sheet {
@@ -720,28 +789,28 @@ input[type="text"]:focus {
 
 /* ─── Responsive ────────────────────────────────────────────────── */
 
-@media (max-width: 1280px) {
-  .workspace {
-    grid-template-columns: 240px minmax(0, 1fr) 280px;
-  }
-}
-
 @media (max-width: 1024px) {
+  .app-shell {
+    height: auto;
+    overflow: visible;
+  }
+
   .workspace {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    overflow: visible;
+    height: auto;
   }
 
   .sidebar,
+  .diff-panel,
   .review-panel {
-    position: static;
-    max-height: none;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+    width: 100% !important;
+    flex-shrink: unset;
+    overflow-y: visible;
   }
 
-  .diff-panel {
-    border-right: none;
-    min-height: unset;
+  .resize-handle {
+    display: none;
   }
 }
 

@@ -96,6 +96,11 @@ export interface FileMaterial {
   existingComments: ExistingInlineComment[];
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface SessionOverviewResponse {
   session: {
     id: string;
@@ -115,6 +120,7 @@ export interface SessionOverviewResponse {
   };
   reviewSummary: string;
   drafts: DraftComment[];
+  chatMessages: ChatMessage[];
   files: FileSummary[];
 }
 

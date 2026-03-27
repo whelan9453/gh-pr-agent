@@ -107,6 +107,7 @@ function makeOverview(): SessionOverview {
       reviewComments: []
     },
     reviewSummary: "",
+    chatMessages: [],
     drafts: [makeDraft()],
     files: [
       {
@@ -131,7 +132,9 @@ describe("createUiApp", () => {
       saveDraft: vi.fn().mockReturnValue(makeDraft()),
       deleteDraft: vi.fn(),
       setReviewSummary: vi.fn(),
-      submitReview: vi.fn().mockResolvedValue({ url: "https://github.com/review/1", drafts: [] })
+      submitReview: vi.fn().mockResolvedValue({ url: "https://github.com/review/1", drafts: [] }),
+      runAiReview: vi.fn().mockResolvedValue({ analysis: "LGTM", draftCount: 0 }),
+      sendChatMessage: vi.fn().mockResolvedValue({ reply: "ok" })
     };
     const app = createUiApp({ service, staticDir: makeStaticDir() });
 

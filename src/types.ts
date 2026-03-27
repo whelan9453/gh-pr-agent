@@ -160,6 +160,7 @@ export interface SessionArtifacts {
   walkthroughOrder: string[];
   drafts: DraftComment[];
   reviewSummary: string;
+  chatHistory: ConversationMessage[];
 }
 
 export interface AppSession {

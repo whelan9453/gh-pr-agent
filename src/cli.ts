@@ -117,15 +117,20 @@ async function resolveInteractiveOptions(options: {
 async function resolveUiOptions(options: {
   model?: string;
   promptForGithubToken?: boolean;
-}): Promise<{ model: ModelPreset; githubToken: string }> {
-  return {
-    model: parseModelPreset(options.model),
-    githubToken: await resolveSecret(
-      "GITHUB_TOKEN",
-      Boolean(options.promptForGithubToken),
-      "GitHub token"
-    )
-  };
+  promptForAzureKey?: boolean;
+}): Promise<ReturnType<typeof resolveConfig>> {
+  const model = parseModelPreset(options.model);
+  const githubToken = await resolveSecret(
+    "GITHUB_TOKEN",
+    Boolean(options.promptForGithubToken),
+    "GitHub token"
+  );
+  const azureFoundryApiKey = await resolveSecret(
+    "AZURE_FOUNDRY_API_KEY",
+    Boolean(options.promptForAzureKey),
+    "Azure Foundry API key"
+  );
+  return resolveConfig({ model, githubToken, azureFoundryApiKey });
 }
 
 function buildProgram(): Command {
@@ -190,11 +195,11 @@ function buildProgram(): Command {
     .argument("[pr-url]", "GitHub pull request URL")
     .option("--model <preset>", "Stored model label for the review session", "haiku")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
+    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
     .action(async (prUrl: string | undefined, options) => {
-      const uiOpts = await resolveUiOptions(options);
+      const config = await resolveUiOptions(options);
       const url = await startUiServer({
-        githubToken: uiOpts.githubToken,
-        model: uiOpts.model,
+        config,
         ...(prUrl ? { initialPrUrl: prUrl } : {})
       });
       process.stdout.write(`PR review UI ready at ${url}\n`);

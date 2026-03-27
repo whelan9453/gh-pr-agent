@@ -1,6 +1,11 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildWalkthroughOrder } from "./walkthrough-order.js";
 import { buildNumberedPatch } from "./diff-line-mapper.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
+import { loadPrompt } from "./prompt-loader.js";
+import { buildPrContextBlock } from "./interactive-session.js";
+import { FoundryConversationClient } from "./conversation-client.js";
 import {
   generateSessionId,
   loadArtifacts,
@@ -11,6 +16,7 @@ import {
 import type {
   AppSession,
   ChangedFile,
+  ConversationMessage,
   DraftComment,
   ExistingInlineComment,
   FileMaterial,
@@ -23,6 +29,9 @@ import type {
   SessionArtifacts,
   WalkthroughCursor
 } from "./types.js";
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const TOTAL_PATCH_BUDGET = 100_000;
 
 export interface DraftCommentInput {
   id?: string;
@@ -39,6 +48,7 @@ export interface SessionOverview {
   prContext: PrContext;
   reviewSummary: string;
   drafts: DraftComment[];
+  chatMessages: Array<{ role: "user" | "assistant"; content: string }>;
   files: Array<{
     path: string;
     previousPath: string | null;
@@ -86,7 +96,8 @@ export async function fetchPrArtifacts(
       files,
       walkthroughOrder: buildWalkthroughOrder(files.map((file) => file.path)),
       drafts: [],
-      reviewSummary: ""
+      reviewSummary: "",
+      chatHistory: []
     }
   };
 }
@@ -128,12 +139,19 @@ export async function createSavedSession(
 export function getSessionOverview(sessionId: string): SessionOverview {
   const session = loadSession(sessionId);
   const artifacts = loadArtifacts(sessionId);
+  const chatHistory = artifacts.chatHistory ?? [];
+  // Skip index 0 (the large PR diff context message sent to Claude) — only expose display messages
+  const chatMessages = chatHistory.slice(1).map((m) => ({
+    role: m.role,
+    content: stripJsonFence(m.content)
+  }));
   return {
     session,
     prInfo: artifacts.prInfo,
     prContext: artifacts.prContext,
     reviewSummary: artifacts.reviewSummary,
     drafts: artifacts.drafts,
+    chatMessages,
     files: artifacts.walkthroughOrder.map((path) => {
       const file = artifacts.files.find((entry) => entry.path === path);
       if (!file) {
@@ -243,6 +261,133 @@ export async function submitReview(
   saveSession(session);
 
   return { url, artifacts };
+}
+
+export async function runAiReview(
+  sessionId: string,
+  client: FoundryConversationClient
+): Promise<{ analysis: string; draftCount: number }> {
+  const session = loadSession(sessionId);
+  const artifacts = loadArtifacts(sessionId);
+  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
+
+  const userMessage = buildAiReviewMessage(session, artifacts);
+  const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
+  const raw = await client.send(systemPrompt, messages, 2000);
+
+  const { analysis, comments } = parseAiComments(raw);
+
+  let draftCount = 0;
+  for (const comment of comments) {
+    if (!comment.path || !comment.line) continue;
+    const file = artifacts.files.find((f) => f.path === comment.path);
+    if (!file) continue;
+    const row = file.diffRows.find(
+      (r) => r.type !== "hunk" && r.rightSelectable && r.newLine === comment.line
+    );
+    if (!row) continue;
+    try {
+      upsertDraftComment(sessionId, {
+        path: comment.path,
+        body: comment.body,
+        side: "RIGHT",
+        startRowKey: row.key,
+        endRowKey: row.key
+      });
+      draftCount++;
+    } catch {
+      // skip comments that can't be mapped to a valid diff range
+    }
+  }
+
+  const updated = loadArtifacts(sessionId);
+  updated.chatHistory = [
+    { role: "user", content: userMessage },
+    { role: "assistant", content: raw }
+  ];
+  saveArtifacts(sessionId, updated);
+
+  return { analysis, draftCount };
+}
+
+export async function sendChatMessage(
+  sessionId: string,
+  message: string,
+  client: FoundryConversationClient
+): Promise<{ reply: string }> {
+  const artifacts = loadArtifacts(sessionId);
+  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
+
+  const history: ConversationMessage[] = artifacts.chatHistory ?? [];
+  const messages: ConversationMessage[] = [...history, { role: "user", content: message }];
+  const reply = await client.send(systemPrompt, messages, 1500);
+
+  artifacts.chatHistory = [...messages, { role: "assistant", content: reply }];
+  saveArtifacts(sessionId, artifacts);
+
+  return { reply };
+}
+
+function buildAiReviewMessage(session: AppSession, artifacts: SessionArtifacts): string {
+  const { prInfo, prContext, files } = artifacts;
+  const totalPatchChars = files.reduce((sum, f) => sum + (f.numberedPatch?.length ?? 0), 0);
+
+  const fileBlocks = files.map((f) => {
+    const parts = [`### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`];
+    if (f.numberedPatch) {
+      let patch = f.numberedPatch;
+      if (totalPatchChars > TOTAL_PATCH_BUDGET) {
+        const budget = Math.floor((patch.length / totalPatchChars) * TOTAL_PATCH_BUDGET);
+        if (patch.length > budget) patch = patch.slice(0, budget) + "\n... (truncated)";
+      }
+      parts.push("```diff", patch, "```");
+    } else {
+      parts.push("(no textual diff)");
+    }
+    return parts.join("\n");
+  });
+
+  const prContextBlock = buildPrContextBlock(prContext);
+
+  return [
+    `PR #${session.prRef.number}: ${prInfo.title}`,
+    `Author: ${prInfo.author}`,
+    `Base: ${prInfo.base} → ${prInfo.head}`,
+    `Changes: +${prInfo.additions} -${prInfo.deletions}, ${prInfo.changedFiles} files`,
+    ...(prContextBlock ? ["", prContextBlock] : []),
+    "",
+    "## Changed Files",
+    "",
+    fileBlocks.join("\n\n")
+  ].join("\n");
+}
+
+function parseAiComments(raw: string): {
+  analysis: string;
+  comments: Array<{ context: string; body: string; path: string | null; line: number | null }>;
+} {
+  const match = /```json\s*([\s\S]*?)```\s*$/.exec(raw);
+  if (!match) return { analysis: raw, comments: [] };
+
+  const analysis = raw.slice(0, match.index).trimEnd();
+  try {
+    const parsed = JSON.parse(match[1] ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) return { analysis, comments: [] };
+    const comments = parsed.flatMap((c) => {
+      if (typeof c !== "object" || c === null) return [];
+      const r = c as Record<string, unknown>;
+      if (typeof r["context"] !== "string" || typeof r["body"] !== "string") return [];
+      return [{
+        context: r["context"],
+        body: r["body"],
+        path: typeof r["path"] === "string" ? r["path"] : null,
+        line: typeof r["line"] === "number" ? r["line"] : null
+      }];
+    });
+    return { analysis, comments };
+  } catch {
+    return { analysis, comments: [] };
+  }
 }
 
 function groupCommentsByPath(comments: PrContext["reviewComments"]): Map<string, ExistingInlineComment[]> {
@@ -371,6 +516,10 @@ function normalizeDraftComment(
     createdAt: existingDraft?.createdAt ?? now,
     updatedAt: now
   };
+}
+
+function stripJsonFence(text: string): string {
+  return text.replace(/```json\s*[\s\S]*?```\s*$/m, "").trimEnd();
 }
 
 function sortDrafts(drafts: DraftComment[]): DraftComment[] {

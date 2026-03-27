@@ -1,4 +1,4 @@
-import {
+import React, {
   startTransition,
   useDeferredValue,
   useEffect,
@@ -13,9 +13,12 @@ import {
   loadFile,
   loadSession,
   persistReviewSummary,
+  runAiReview,
   saveDraft,
+  sendChatMessage,
   submitReview
 } from "./api";
+import type { ChatMessage } from "./api";
 import type {
   DiffRow,
   DraftPayload,
@@ -40,13 +43,18 @@ interface ReviewWorkspaceProps {
   loadingFile: boolean;
   savingDraft: boolean;
   submittingReview: boolean;
+  runningAiReview: boolean;
+  sendingChat: boolean;
   reviewBody: string;
+  chatMessages: ChatMessage[];
   successMessage: string | null;
   onSelectPath: (path: string) => void;
   onReviewBodyChange: (value: string) => void;
   onSaveDraft: (payload: DraftPayload) => Promise<void>;
   onDeleteDraft: (draftId: string) => Promise<void>;
   onSubmitReview: (body: string) => Promise<void>;
+  onRunAiReview: () => Promise<void>;
+  onSendChatMessage: (message: string) => Promise<void>;
 }
 
 export default function App(): JSX.Element {
@@ -62,6 +70,9 @@ export default function App(): JSX.Element {
   const [loadingFile, setLoadingFile] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [runningAiReview, setRunningAiReview] = useState(false);
+  const [sendingChat, setSendingChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const bootstrapped = useRef(false);
@@ -135,6 +146,7 @@ export default function App(): JSX.Element {
         setSessionId(nextSessionId);
         setSession(payload);
         setReviewBody(payload.reviewSummary);
+        setChatMessages(payload.chatMessages ?? []);
         setSelectedPath((current) => {
           if (current && payload.files.some((file) => file.path === current) && !resetSelection) {
             return current;
@@ -191,6 +203,37 @@ export default function App(): JSX.Element {
       setError(error instanceof Error ? error.message : "Unable to delete draft comment.");
     } finally {
       setSavingDraft(false);
+    }
+  }
+
+  async function handleRunAiReview(): Promise<void> {
+    if (!sessionId) return;
+    try {
+      setRunningAiReview(true);
+      setError(null);
+      const result = await runAiReview(sessionId);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: result.analysis }]);
+      await refreshSession(sessionId);
+      if (selectedPath) await refreshFile(sessionId, selectedPath);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to run AI review.");
+    } finally {
+      setRunningAiReview(false);
+    }
+  }
+
+  async function handleSendChatMessage(message: string): Promise<void> {
+    if (!sessionId) return;
+    try {
+      setSendingChat(true);
+      setError(null);
+      setChatMessages((prev) => [...prev, { role: "user", content: message }]);
+      const result = await sendChatMessage(sessionId, message);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: result.reply }]);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to send message.");
+    } finally {
+      setSendingChat(false);
     }
   }
 
@@ -254,6 +297,9 @@ export default function App(): JSX.Element {
           loadingFile={loadingFile}
           savingDraft={savingDraft}
           submittingReview={submittingReview}
+          runningAiReview={runningAiReview}
+          sendingChat={sendingChat}
+          chatMessages={chatMessages}
           reviewBody={reviewBody}
           successMessage={successMessage}
           onSelectPath={setSelectedPath}
@@ -261,6 +307,8 @@ export default function App(): JSX.Element {
           onSaveDraft={handleSaveDraft}
           onDeleteDraft={handleDeleteDraft}
           onSubmitReview={handleSubmitReview}
+          onRunAiReview={handleRunAiReview}
+          onSendChatMessage={handleSendChatMessage}
         />
       ) : (
         <section className="empty-panel">
@@ -278,6 +326,12 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const [draftBody, setDraftBody] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const [leftWidth, setLeftWidth] = useState(280);
+  const [rightWidth, setRightWidth] = useState(360);
+  const resizing = useRef<"left" | "right" | null>(null);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
+
   useEffect(() => {
     setSelection(null);
     setAnchor(null);
@@ -293,6 +347,27 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
     window.addEventListener("mouseup", stop);
     return () => window.removeEventListener("mouseup", stop);
   }, [dragging]);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent): void {
+      if (!resizing.current) return;
+      const delta = e.clientX - resizeStartX.current;
+      if (resizing.current === "left") {
+        setLeftWidth(Math.max(160, Math.min(500, resizeStartWidth.current + delta)));
+      } else {
+        setRightWidth(Math.max(200, Math.min(600, resizeStartWidth.current - delta)));
+      }
+    }
+    function onMouseUp(): void {
+      resizing.current = null;
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
 
   const file = props.fileData?.file ?? null;
   const drafts = props.fileData?.drafts ?? [];
@@ -329,9 +404,16 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
     });
   }
 
+  function startResize(side: "left" | "right", e: React.MouseEvent): void {
+    resizing.current = side;
+    resizeStartX.current = e.clientX;
+    resizeStartWidth.current = side === "left" ? leftWidth : rightWidth;
+    e.preventDefault();
+  }
+
   return (
     <section className="workspace">
-      <aside className="sidebar">
+      <aside className="sidebar" style={{ width: leftWidth }}>
         <div className="sidebar-card">
           <p className="eyebrow">PR</p>
           <h2>{props.session.prInfo.title}</h2>
@@ -377,6 +459,10 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
         </div>
       </aside>
 
+      <div
+        className={`resize-handle${resizing.current === "left" ? " dragging" : ""}`}
+        onMouseDown={(e) => startResize("left", e)}
+      />
       <section className="diff-panel">
         {props.loadingFile ? <div className="diff-empty">正在載入 diff...</div> : null}
         {!props.loadingFile && file ? (
@@ -440,7 +526,23 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
         ) : null}
       </section>
 
-      <aside className="review-panel">
+      <div
+        className={`resize-handle${resizing.current === "right" ? " dragging" : ""}`}
+        onMouseDown={(e) => startResize("right", e)}
+      />
+      <aside className="review-panel" style={{ width: rightWidth }}>
+        <div className="sidebar-card">
+          <p className="eyebrow">AI Review</p>
+          <p className="meta-line">用 pr-summary 提示自動產生 draft comments。</p>
+          <button
+            type="button"
+            disabled={props.runningAiReview}
+            onClick={() => void props.onRunAiReview()}
+          >
+            {props.runningAiReview ? "分析中..." : "執行 AI Review"}
+          </button>
+        </div>
+
         <div className="sidebar-card">
           <p className="eyebrow">Selection</p>
           {selectionSummary ? (
@@ -513,6 +615,12 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           </button>
         </div>
 
+        <ChatPanel
+          messages={props.chatMessages}
+          sending={props.sendingChat}
+          onSend={props.onSendChatMessage}
+        />
+
         {confirmOpen ? (
           <section className="confirm-sheet" role="dialog" aria-modal="true">
             <div className="confirm-card">
@@ -543,6 +651,64 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
         ) : null}
       </aside>
     </section>
+  );
+}
+
+interface ChatPanelProps {
+  messages: ChatMessage[];
+  sending: boolean;
+  onSend: (message: string) => Promise<void>;
+}
+
+function ChatPanel(props: ChatPanelProps): JSX.Element {
+  const [input, setInput] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [props.messages]);
+
+  function handleSubmit(event: React.FormEvent): void {
+    event.preventDefault();
+    const message = input.trim();
+    if (!message || props.sending) return;
+    setInput("");
+    void props.onSend(message);
+  }
+
+  return (
+    <div className="sidebar-card chat-card">
+      <p className="eyebrow">Chat</p>
+      {props.messages.length === 0 ? (
+        <p className="meta-line">先執行 AI Review，或直接輸入問題。</p>
+      ) : (
+        <div className="chat-messages">
+          {props.messages.map((msg, i) => (
+            <div key={i} className={`chat-bubble ${msg.role}`}>
+              <pre>{msg.content}</pre>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      )}
+      <form className="chat-form" onSubmit={handleSubmit}>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="問關於這個 PR 的問題..."
+          rows={3}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit(e);
+            }
+          }}
+        />
+        <button type="submit" disabled={!input.trim() || props.sending}>
+          {props.sending ? "傳送中..." : "傳送"}
+        </button>
+      </form>
+    </div>
   );
 }
 

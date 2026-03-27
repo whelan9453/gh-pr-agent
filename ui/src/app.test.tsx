@@ -42,6 +42,7 @@ function makeSession(): SessionOverviewResponse {
       reviewComments: []
     },
     reviewSummary: "",
+    chatMessages: [],
     drafts: [],
     files: [
       {
@@ -128,6 +129,9 @@ describe("ReviewWorkspace", () => {
         loadingFile={false}
         savingDraft={false}
         submittingReview={false}
+        runningAiReview={false}
+        sendingChat={false}
+        chatMessages={[]}
         reviewBody=""
         successMessage={null}
         onSelectPath={vi.fn()}
@@ -135,6 +139,8 @@ describe("ReviewWorkspace", () => {
         onSaveDraft={onSaveDraft}
         onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
         onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
       />
     );
 

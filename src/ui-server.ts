@@ -9,6 +9,8 @@ import {
   deleteDraftComment,
   getFileMaterial,
   getSessionOverview,
+  runAiReview,
+  sendChatMessage,
   setReviewSummary,
   submitReview,
   upsertDraftComment,
@@ -16,7 +18,8 @@ import {
   type SessionOverview
 } from "./review-session.js";
 import { loadArtifacts } from "./session-store.js";
-import type { DraftComment, FileMaterial, ModelPreset, ReviewSubmissionPayload } from "./types.js";
+import { FoundryConversationClient } from "./conversation-client.js";
+import type { AppConfig, DraftComment, FileMaterial, ModelPreset, ReviewSubmissionPayload } from "./types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -53,6 +56,8 @@ export interface UiServerService {
     sessionId: string,
     payload: ReviewSubmissionPayload
   ): Promise<{ url: string; drafts: DraftComment[] }>;
+  runAiReview(sessionId: string): Promise<{ analysis: string; draftCount: number }>;
+  sendChatMessage(sessionId: string, message: string): Promise<{ reply: string }>;
 }
 
 interface CreateUiServerOptions {
@@ -61,18 +66,19 @@ interface CreateUiServerOptions {
 }
 
 export interface StartUiServerOptions {
-  githubToken: string;
-  model: ModelPreset;
+  config: AppConfig;
   initialPrUrl?: string;
 }
 
-export function createDefaultUiServerService(
-  githubToken: string,
-  model: ModelPreset
-): UiServerService {
+export function createDefaultUiServerService(config: AppConfig): UiServerService {
+  const client = new FoundryConversationClient(
+    config.azureFoundryBaseUrl,
+    config.azureFoundryApiKey,
+    config.deploymentName
+  );
   return {
     async createSession(prUrl) {
-      const session = await createSavedSession(prUrl, githubToken, model, "ui-review");
+      const session = await createSavedSession(prUrl, config.githubToken, config.selectedModel, "ui-review");
       return { sessionId: session.id };
     },
     getSessionOverview,
@@ -85,8 +91,14 @@ export function createDefaultUiServerService(
     deleteDraft: deleteDraftComment,
     setReviewSummary,
     async submitReview(sessionId, payload) {
-      const result = await submitReview(sessionId, githubToken, payload);
+      const result = await submitReview(sessionId, config.githubToken, payload);
       return { url: result.url, drafts: result.artifacts.drafts };
+    },
+    async runAiReview(sessionId) {
+      return runAiReview(sessionId, client);
+    },
+    async sendChatMessage(sessionId, message) {
+      return sendChatMessage(sessionId, message, client);
     }
   };
 }
@@ -154,6 +166,19 @@ export function registerApiRoutes(app: Express, service: UiServerService): void 
       );
     });
   });
+
+  app.post("/api/sessions/:id/ai-review", async (req, res) => {
+    await handleAsync(req, res, async () => {
+      res.json(await service.runAiReview(req.params.id ?? ""));
+    });
+  });
+
+  app.post("/api/sessions/:id/chat", async (req, res) => {
+    await handleAsync(req, res, async () => {
+      const { message } = z.object({ message: z.string().min(1) }).parse(req.body);
+      res.json(await service.sendChatMessage(req.params.id ?? "", message));
+    });
+  });
 }
 
 export function createUiApp(options: CreateUiServerOptions): Express {
@@ -176,7 +201,7 @@ export function createUiApp(options: CreateUiServerOptions): Express {
 }
 
 export async function startUiServer(options: StartUiServerOptions): Promise<string> {
-  const service = createDefaultUiServerService(options.githubToken, options.model);
+  const service = createDefaultUiServerService(options.config);
   const app = createUiApp({ service });
   const port = await listen(app);
   const url = new URL(`http://127.0.0.1:${port}/`);
