@@ -646,6 +646,13 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           </ul>
         </div>
 
+        <ChatPanel
+          messages={props.chatMessages}
+          sending={props.sendingChat}
+          onSend={props.onSendChatMessage}
+          onAnnotationClick={handleAnnotationClick}
+        />
+
         <div className="sidebar-card">
           <p className="eyebrow">Review Summary</p>
           <textarea
@@ -662,13 +669,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             {props.submittingReview ? "送出中..." : "送出 Review"}
           </button>
         </div>
-
-        <ChatPanel
-          messages={props.chatMessages}
-          sending={props.sendingChat}
-          onSend={props.onSendChatMessage}
-          onAnnotationClick={handleAnnotationClick}
-        />
 
         {confirmOpen ? (
           <section className="confirm-sheet" role="dialog" aria-modal="true">
