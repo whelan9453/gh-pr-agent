@@ -587,6 +587,12 @@ button {
   flex-shrink: 0;
 }
 
+.review-section.chat-section {
+  flex: 1;
+  min-height: 80px;
+  flex-shrink: 1;
+}
+
 .v-resize-handle {
   height: 4px;
   flex-shrink: 0;

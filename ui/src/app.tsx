@@ -338,7 +338,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
 
-  const [chatHeight, setChatHeight] = useState(320);
   const [draftsHeight, setDraftsHeight] = useState(160);
   const [summaryHeight, setSummaryHeight] = useState(200);
   const vResizing = useRef<"chat-drafts" | "drafts-summary" | null>(null);
@@ -377,8 +376,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
         const delta = e.clientY - vResizeStartY.current;
         const [a, b] = vResizeStartHeights.current;
         if (vResizing.current === "chat-drafts") {
-          setChatHeight(Math.max(80, a + delta));
-          setDraftsHeight(Math.max(60, b - delta));
+          // chat is flex:1 so only drafts height changes
+          setDraftsHeight(Math.max(60, a - delta));
         } else {
           setDraftsHeight(Math.max(60, a + delta));
           setSummaryHeight(Math.max(80, b - delta));
@@ -480,7 +479,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
     vResizing.current = boundary;
     vResizeStartY.current = e.clientY;
     vResizeStartHeights.current = boundary === "chat-drafts"
-      ? [chatHeight, draftsHeight]
+      ? [draftsHeight, draftsHeight]
       : [draftsHeight, summaryHeight];
     e.preventDefault();
   }
@@ -663,7 +662,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           </button>
         </div>
 
-        <div className="review-section" style={{ height: chatHeight }}>
+        <div className="review-section chat-section">
           <ChatPanel
             messages={props.chatMessages}
             sending={props.sendingChat}
