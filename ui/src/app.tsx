@@ -147,7 +147,13 @@ export default function App(): JSX.Element {
         setSessionId(nextSessionId);
         setSession(payload);
         setReviewBody(payload.reviewSummary);
-        setChatMessages(payload.chatMessages ?? []);
+        // Preserve annotations from current state — server doesn't store them
+        setChatMessages((current) => {
+          const next = payload.chatMessages ?? [];
+          return next.map((msg, i) =>
+            current[i]?.annotations ? { ...msg, annotations: current[i].annotations } : msg
+          );
+        });
         setSelectedPath((current) => {
           if (current && payload.files.some((file) => file.path === current) && !resetSelection) {
             return current;
@@ -411,6 +417,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
 
   function handleAnnotationClick(annotation: AiReviewAnnotation): void {
     if (!annotation.path || annotation.line == null) return;
+    setSelection(null);
+    setDraftBody("");
     const alreadyLoaded =
       props.fileData?.file.path === annotation.path;
     if (alreadyLoaded) {
