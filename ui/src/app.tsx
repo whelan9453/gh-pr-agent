@@ -845,8 +845,9 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
                 className={`chat-bubble ${msg.role}`}
                 dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }}
               />
-              {msg.annotations && msg.annotations.length > 0 ? (
+              {msg.annotations && msg.annotations.filter((a) => a.path).length > 0 ? (
                 <div className="annotation-chips">
+                  <span className="annotation-chips-label">跳轉到程式碼</span>
                   {msg.annotations.filter((a) => a.path).map((a, j) => (
                     <button
                       key={j}
@@ -854,8 +855,11 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
                       className="annotation-chip"
                       onClick={() => props.onAnnotationClick(a)}
                     >
-                      <span className="annotation-chip-context">{a.context}</span>
-                      <span className="annotation-chip-loc">{a.path}{a.line != null ? `:${a.line}` : ""}</span>
+                      <span className="annotation-chip-index">{j + 1}</span>
+                      <span className="annotation-chip-body">
+                        <span className="annotation-chip-context">{a.context}</span>
+                        <span className="annotation-chip-loc">{a.path}{a.line != null ? `:${a.line}` : ""}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
