@@ -213,8 +213,13 @@ export default function App(): JSX.Element {
       setRunningAiReview(true);
       setError(null);
       const result = await runAiReview(sessionId);
-      setChatMessages((prev) => [...prev, { role: "assistant", content: result.analysis, annotations: result.comments }]);
       await refreshSession(sessionId);
+      // refreshSession overwrites chatMessages from server (no annotations), so re-attach them now
+      setChatMessages((prev) => {
+        const lastIdx = prev.length - 1;
+        if (lastIdx < 0 || prev[lastIdx]?.role !== "assistant") return prev;
+        return prev.map((m, i) => i === lastIdx ? { ...m, annotations: result.comments } : m);
+      });
       if (selectedPath) await refreshFile(sessionId, selectedPath);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unable to run AI review.");
