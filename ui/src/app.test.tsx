@@ -145,8 +145,9 @@ describe("ReviewWorkspace", () => {
     );
 
     fireEvent.mouseDown(screen.getByRole("button", { name: "RIGHT line 9" }));
+    fireEvent.mouseUp(window);
     await user.type(screen.getByPlaceholderText("這段改動有什麼問題？"), "Need another guard");
-    await user.click(screen.getByRole("button", { name: "新增 Draft" }));
+    await user.click(screen.getByRole("button", { name: "新增留言" }));
 
     expect(onSaveDraft).toHaveBeenCalledWith({
       path: "src/app.ts",

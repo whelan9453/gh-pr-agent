@@ -430,6 +430,35 @@ button {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
+.diff-inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border);
+  border-bottom: 2px solid var(--accent);
+}
+
+.inline-form-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.diff-inline-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.inline-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .diff-hunk {
   grid-column: 1 / -1;
   padding: 0.375rem 1rem;

@@ -406,6 +406,14 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
 
   const commentsByRow = useMemo(() => buildCommentIndex(file), [file]);
 
+  const selectionEndKey = useMemo(() => {
+    if (!selection || !file) return null;
+    const startIndex = file.diffRows.findIndex((r) => r.key === selection.startRowKey);
+    const endIndex = file.diffRows.findIndex((r) => r.key === selection.endRowKey);
+    if (startIndex < 0 || endIndex < 0) return null;
+    return file.diffRows[Math.max(startIndex, endIndex)]?.key ?? null;
+  }, [selection, file]);
+
   function handleRowPress(row: DiffRow, side: ReviewCommentSide, shiftKey: boolean): void {
     if (!isSelectable(row, side)) {
       return;
@@ -481,7 +489,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                   <span className="file-meta">
                     <span>+{fileSummary.additions}</span>
                     <span>-{fileSummary.deletions}</span>
-                    <span>{fileSummary.draftCount} drafts</span>
+                    {fileSummary.draftCount > 0 ? <span>{fileSummary.draftCount} 則留言</span> : null}
                   </span>
                 </button>
               </li>
@@ -514,13 +522,13 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
               {file.diffRows.length === 0 ? (
                 <div className="diff-empty">這個檔案沒有可顯示的 textual diff。</div>
               ) : (
-                file.diffRows.map((row) => {
+                file.diffRows.flatMap((row) => {
                   if (row.type === "hunk") {
-                    return (
+                    return [
                       <div className="diff-hunk" key={row.key}>
                         {row.header}
                       </div>
-                    );
+                    ];
                   }
 
                   const leftSelected = selection ? rowIsSelected(file, row, "LEFT", selection) : false;
@@ -528,7 +536,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                   const leftComments = commentsByRow.get(`LEFT:${row.key}`) ?? [];
                   const rightComments = commentsByRow.get(`RIGHT:${row.key}`) ?? [];
 
-                  return (
+                  const elements: JSX.Element[] = [
                     <div className="diff-row" key={row.key} id={`diff-row-${row.key}`}>
                       <DiffCell
                         row={row}
@@ -549,7 +557,53 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                         onMouseEnter={() => handleRowHover(row, "RIGHT")}
                       />
                     </div>
-                  );
+                  ];
+
+                  if (!dragging && selectionSummary && row.key === selectionEndKey) {
+                    elements.push(
+                      <div key="inline-form" className="diff-inline-form">
+                        <span className="inline-form-label">{selectionSummary.label}</span>
+                        <textarea
+                          value={draftBody}
+                          onChange={(e) => setDraftBody(e.target.value)}
+                          placeholder="這段改動有什麼問題？"
+                          rows={4}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") { setSelection(null); setDraftBody(""); }
+                          }}
+                        />
+                        <div className="inline-form-actions">
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => { setSelection(null); setDraftBody(""); }}
+                          >
+                            取消
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!draftBody.trim() || props.savingDraft}
+                            onClick={() => {
+                              void props.onSaveDraft({
+                                path: selectionSummary.path,
+                                body: draftBody,
+                                side: selectionSummary.side,
+                                startRowKey: selectionSummary.startRowKey,
+                                endRowKey: selectionSummary.endRowKey
+                              });
+                              setDraftBody("");
+                              setSelection(null);
+                            }}
+                          >
+                            {props.savingDraft ? "儲存中..." : "新增留言"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return elements;
                 })
               )}
             </div>
@@ -575,45 +629,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
         </div>
 
         <div className="sidebar-card">
-          <p className="eyebrow">Selection</p>
-          {selectionSummary ? (
-            <>
-              <h3>{selectionSummary.label}</h3>
-              <p className="meta-line">{selectionSummary.path}</p>
-            </>
-          ) : (
-            <p className="meta-line">在 diff 右側或左側選一段連續行數。</p>
-          )}
-          <textarea
-            value={draftBody}
-            onChange={(event) => setDraftBody(event.target.value)}
-            placeholder="這段改動有什麼問題？"
-            rows={6}
-          />
-          <button
-            type="button"
-            disabled={!selectionSummary || !draftBody.trim() || props.savingDraft}
-            onClick={() => {
-              if (!selectionSummary) {
-                return;
-              }
-              void props.onSaveDraft({
-                path: selectionSummary.path,
-                body: draftBody,
-                side: selectionSummary.side,
-                startRowKey: selectionSummary.startRowKey,
-                endRowKey: selectionSummary.endRowKey
-              });
-              setDraftBody("");
-            }}
-          >
-            {props.savingDraft ? "儲存中..." : "新增 Draft"}
-          </button>
-        </div>
-
-        <div className="sidebar-card">
           <div className="sidebar-title-row">
-            <h3>Drafts</h3>
+            <h3>待送出留言</h3>
             <span>{drafts.length}</span>
           </div>
           <ul className="draft-list">
