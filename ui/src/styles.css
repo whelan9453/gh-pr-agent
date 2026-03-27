@@ -575,12 +575,30 @@ button {
 
 .review-panel {
   background: var(--bg-canvas);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.review-section {
   overflow-y: auto;
   overflow-x: hidden;
-  display: grid;
-  gap: 0;
-  align-content: start;
   flex-shrink: 0;
+}
+
+.v-resize-handle {
+  height: 4px;
+  flex-shrink: 0;
+  background: var(--border);
+  cursor: row-resize;
+  position: relative;
+  z-index: 10;
+}
+
+.v-resize-handle:hover,
+.v-resize-handle.dragging {
+  background: var(--accent);
 }
 
 .review-panel .sidebar-card {
@@ -692,6 +710,13 @@ input[type="text"]:focus {
 
 /* ─── Chat Panel ────────────────────────────────────────────────── */
 
+.review-section > .chat-card {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
 .chat-card {
   display: grid;
   gap: 0.625rem;
@@ -701,7 +726,7 @@ input[type="text"]:focus {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-height: 400px;
+  flex: 1;
   overflow-y: auto;
   padding: 0.25rem 0;
 }

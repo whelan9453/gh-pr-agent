@@ -337,6 +337,14 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const resizing = useRef<"left" | "right" | null>(null);
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
+
+  const [chatHeight, setChatHeight] = useState(320);
+  const [draftsHeight, setDraftsHeight] = useState(160);
+  const [summaryHeight, setSummaryHeight] = useState(200);
+  const vResizing = useRef<"chat-drafts" | "drafts-summary" | null>(null);
+  const vResizeStartY = useRef(0);
+  const vResizeStartHeights = useRef<[number, number]>([0, 0]);
+
   const pendingScrollTarget = useRef<{ path: string; line: number } | null>(null);
 
   useEffect(() => {
@@ -357,16 +365,29 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent): void {
-      if (!resizing.current) return;
-      const delta = e.clientX - resizeStartX.current;
-      if (resizing.current === "left") {
-        setLeftWidth(Math.max(160, Math.min(window.innerWidth - 600, resizeStartWidth.current + delta)));
-      } else {
-        setRightWidth(Math.max(200, Math.min(window.innerWidth - 400, resizeStartWidth.current - delta)));
+      if (resizing.current) {
+        const delta = e.clientX - resizeStartX.current;
+        if (resizing.current === "left") {
+          setLeftWidth(Math.max(160, Math.min(window.innerWidth - 600, resizeStartWidth.current + delta)));
+        } else {
+          setRightWidth(Math.max(200, Math.min(window.innerWidth - 400, resizeStartWidth.current - delta)));
+        }
+      }
+      if (vResizing.current) {
+        const delta = e.clientY - vResizeStartY.current;
+        const [a, b] = vResizeStartHeights.current;
+        if (vResizing.current === "chat-drafts") {
+          setChatHeight(Math.max(80, a + delta));
+          setDraftsHeight(Math.max(60, b - delta));
+        } else {
+          setDraftsHeight(Math.max(60, a + delta));
+          setSummaryHeight(Math.max(80, b - delta));
+        }
       }
     }
     function onMouseUp(): void {
       resizing.current = null;
+      vResizing.current = null;
     }
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
@@ -452,6 +473,15 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
     resizing.current = side;
     resizeStartX.current = e.clientX;
     resizeStartWidth.current = side === "left" ? leftWidth : rightWidth;
+    e.preventDefault();
+  }
+
+  function startVResize(boundary: "chat-drafts" | "drafts-summary", e: React.MouseEvent): void {
+    vResizing.current = boundary;
+    vResizeStartY.current = e.clientY;
+    vResizeStartHeights.current = boundary === "chat-drafts"
+      ? [chatHeight, draftsHeight]
+      : [draftsHeight, summaryHeight];
     e.preventDefault();
   }
 
@@ -633,46 +663,62 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           </button>
         </div>
 
-        <ChatPanel
-          messages={props.chatMessages}
-          sending={props.sendingChat}
-          onSend={props.onSendChatMessage}
-          onAnnotationClick={handleAnnotationClick}
-        />
-
-        <div className="sidebar-card">
-          <div className="sidebar-title-row">
-            <h3>待送出留言</h3>
-            <span>{drafts.length}</span>
-          </div>
-          <ul className="draft-list">
-            {drafts.map((draft) => (
-              <li key={draft.id} className="draft-item">
-                <p className="draft-title">{formatDraftRange(draft)}</p>
-                <p>{draft.body}</p>
-                <button type="button" onClick={() => void props.onDeleteDraft(draft.id)}>
-                  刪除
-                </button>
-              </li>
-            ))}
-          </ul>
+        <div className="review-section" style={{ height: chatHeight }}>
+          <ChatPanel
+            messages={props.chatMessages}
+            sending={props.sendingChat}
+            onSend={props.onSendChatMessage}
+            onAnnotationClick={handleAnnotationClick}
+          />
         </div>
 
-        <div className="sidebar-card">
-          <p className="eyebrow">Review Summary</p>
-          <textarea
-            value={props.reviewBody}
-            onChange={(event) => props.onReviewBodyChange(event.target.value)}
-            placeholder="總結這次 review。可以留空，只送 inline comments。"
-            rows={8}
-          />
-          <button
-            type="button"
-            disabled={props.submittingReview || (drafts.length === 0 && !props.reviewBody.trim())}
-            onClick={() => setConfirmOpen(true)}
-          >
-            {props.submittingReview ? "送出中..." : "送出 Review"}
-          </button>
+        <div
+          className={`v-resize-handle${vResizing.current === "chat-drafts" ? " dragging" : ""}`}
+          onMouseDown={(e) => startVResize("chat-drafts", e)}
+        />
+
+        <div className="review-section" style={{ height: draftsHeight }}>
+          <div className="sidebar-card">
+            <div className="sidebar-title-row">
+              <h3>待送出留言</h3>
+              <span>{drafts.length}</span>
+            </div>
+            <ul className="draft-list">
+              {drafts.map((draft) => (
+                <li key={draft.id} className="draft-item">
+                  <p className="draft-title">{formatDraftRange(draft)}</p>
+                  <p>{draft.body}</p>
+                  <button type="button" onClick={() => void props.onDeleteDraft(draft.id)}>
+                    刪除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div
+          className={`v-resize-handle${vResizing.current === "drafts-summary" ? " dragging" : ""}`}
+          onMouseDown={(e) => startVResize("drafts-summary", e)}
+        />
+
+        <div className="review-section" style={{ height: summaryHeight }}>
+          <div className="sidebar-card">
+            <p className="eyebrow">Review Summary</p>
+            <textarea
+              value={props.reviewBody}
+              onChange={(event) => props.onReviewBodyChange(event.target.value)}
+              placeholder="總結這次 review。可以留空，只送 inline comments。"
+              rows={8}
+            />
+            <button
+              type="button"
+              disabled={props.submittingReview || (drafts.length === 0 && !props.reviewBody.trim())}
+              onClick={() => setConfirmOpen(true)}
+            >
+              {props.submittingReview ? "送出中..." : "送出 Review"}
+            </button>
+          </div>
         </div>
 
         {confirmOpen ? (
