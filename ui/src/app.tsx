@@ -354,9 +354,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
       if (!resizing.current) return;
       const delta = e.clientX - resizeStartX.current;
       if (resizing.current === "left") {
-        setLeftWidth(Math.max(160, Math.min(500, resizeStartWidth.current + delta)));
+        setLeftWidth(Math.max(160, Math.min(window.innerWidth - 600, resizeStartWidth.current + delta)));
       } else {
-        setRightWidth(Math.max(200, Math.min(600, resizeStartWidth.current - delta)));
+        setRightWidth(Math.max(200, Math.min(window.innerWidth - 400, resizeStartWidth.current - delta)));
       }
     }
     function onMouseUp(): void {

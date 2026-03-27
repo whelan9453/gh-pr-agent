@@ -273,7 +273,7 @@ export async function runAiReview(
 
   const userMessage = buildAiReviewMessage(session, artifacts);
   const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
-  const raw = await client.send(systemPrompt, messages, 2000);
+  const raw = await client.send(systemPrompt, messages, 8192);
 
   const { analysis, comments } = parseAiComments(raw);
 
@@ -320,7 +320,7 @@ export async function sendChatMessage(
 
   const history: ConversationMessage[] = artifacts.chatHistory ?? [];
   const messages: ConversationMessage[] = [...history, { role: "user", content: message }];
-  const reply = await client.send(systemPrompt, messages, 1500);
+  const reply = await client.send(systemPrompt, messages, 3000);
 
   artifacts.chatHistory = [...messages, { role: "assistant", content: reply }];
   saveArtifacts(sessionId, artifacts);
