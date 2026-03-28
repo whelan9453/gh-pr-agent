@@ -270,10 +270,24 @@ export default function App(): JSX.Element {
     }
   }
 
+  const pendingModelUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   function handleBackendSettingsChange(partial: Partial<BackendSettings>): void {
-    void updateSettings(partial).then(setBackendSettings).catch((err) => {
-      setError(err instanceof Error ? err.message : "Failed to update settings");
-    });
+    if ("claudeCliModel" in partial) {
+      // Debounce model name: only send after user stops typing for 500ms
+      setBackendSettings((prev) => ({ ...prev, ...partial }));
+      if (pendingModelUpdate.current !== null) clearTimeout(pendingModelUpdate.current);
+      pendingModelUpdate.current = setTimeout(() => {
+        pendingModelUpdate.current = null;
+        void updateSettings(partial).catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to update settings");
+        });
+      }, 500);
+    } else {
+      void updateSettings(partial).then(setBackendSettings).catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to update settings");
+      });
+    }
   }
 
   async function handleSendAnnotationMessage(

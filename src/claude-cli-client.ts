@@ -20,7 +20,8 @@ export class ClaudeCliClient {
   send(
     system: string,
     messages: ConversationMessage[],
-    _maxTokens = 2048
+    _maxTokens = 2048,
+    signal?: AbortSignal
   ): Promise<string> {
     const prompt = buildPrompt(messages);
 
@@ -32,14 +33,30 @@ export class ClaudeCliClient {
     ];
 
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error("Aborted"));
+        return;
+      }
+
       const proc = spawn("claude", args);
       let stdout = "";
       let stderr = "";
+
+      const onAbort = () => {
+        proc.kill();
+        reject(new Error("Aborted"));
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
 
       proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
       proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
 
       proc.on("close", (code) => {
+        signal?.removeEventListener("abort", onAbort);
+        if (signal?.aborted) {
+          reject(new Error("Aborted"));
+          return;
+        }
         if (code !== 0) {
           reject(new Error(`claude CLI exited with code ${code}: ${stderr.trim()}`));
           return;
@@ -59,6 +76,7 @@ export class ClaudeCliClient {
       });
 
       proc.on("error", (err) => {
+        signal?.removeEventListener("abort", onAbort);
         reject(new Error(`Failed to spawn claude CLI: ${err.message}`));
       });
     });

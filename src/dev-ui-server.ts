@@ -28,7 +28,19 @@ if (!githubToken) {
 
 let config: AppConfig;
 if (azureFoundryApiKey) {
-  config = resolveConfig({ model, githubToken, azureFoundryApiKey });
+  try {
+    config = resolveConfig({ model, githubToken, azureFoundryApiKey });
+  } catch {
+    process.stderr.write("Azure Foundry config incomplete — falling back to Claude Code CLI\n");
+    config = {
+      githubToken,
+      azureFoundryBaseUrl: "",
+      azureFoundryApiKey: "",
+      selectedModel: model,
+      deploymentName: "",
+      ...(claudeModel ? { claudeCliModel: claudeModel } : {})
+    };
+  }
 } else {
   process.stderr.write("AZURE_FOUNDRY_API_KEY not set — using Claude Code CLI\n");
   config = {

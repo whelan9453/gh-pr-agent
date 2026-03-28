@@ -3,7 +3,7 @@ import type { ConversationMessage } from "./types.js";
 import { ClaudeCliClient } from "./claude-cli-client.js";
 
 export interface ConversationClient {
-  send(system: string, messages: ConversationMessage[], maxTokens?: number): Promise<string>;
+  send(system: string, messages: ConversationMessage[], maxTokens?: number, signal?: AbortSignal): Promise<string>;
 }
 
 export type ClientBackend = "foundry" | "claude-cli";
@@ -44,14 +44,13 @@ export class FoundryConversationClient {
   async send(
     system: string,
     messages: ConversationMessage[],
-    maxTokens = 2048
+    maxTokens = 2048,
+    signal?: AbortSignal
   ): Promise<string> {
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: maxTokens,
-      system,
-      messages
-    });
+    const response = await this.client.messages.create(
+      { model: this.model, max_tokens: maxTokens, system, messages },
+      signal ? { signal } : undefined
+    );
 
     return response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")

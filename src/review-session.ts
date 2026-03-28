@@ -300,7 +300,8 @@ export async function sendAnnotationChatMessage(
 export async function runAiReview(
   sessionId: string,
   client: ConversationClient,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal
 ): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }> {
   onProgress?.("載入 PR 資料...");
   const session = loadSession(sessionId);
@@ -316,7 +317,7 @@ export async function runAiReview(
   const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
 
   onProgress?.("傳送至 Claude，等待回應...");
-  const raw = await client.send(systemPrompt, messages, 8192);
+  const raw = await client.send(systemPrompt, messages, 8192, signal);
 
   onProgress?.("解析分析結果...");
   const { analysis, comments } = parseAiComments(raw);

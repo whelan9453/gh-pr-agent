@@ -70,7 +70,7 @@ export interface UiServerService {
     sessionId: string,
     payload: ReviewSubmissionPayload
   ): Promise<{ url: string; drafts: DraftComment[] }>;
-  runAiReview(sessionId: string, onProgress?: (message: string) => void): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }>;
+  runAiReview(sessionId: string, onProgress?: (message: string) => void, signal?: AbortSignal): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }>;
   sendAnnotationChat(sessionId: string, context: string, body: string, path: string | null, thread: Array<{ role: "user" | "assistant"; content: string }>, message: string): Promise<{ reply: string }>;
   sendChatMessage(sessionId: string, message: string): Promise<{ reply: string }>;
   getSettings(): BackendSettings;
@@ -119,8 +119,8 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
       const result = await submitReview(sessionId, config.githubToken, payload);
       return { url: result.url, drafts: result.artifacts.drafts };
     },
-    async runAiReview(sessionId, onProgress) {
-      return runAiReview(sessionId, getClient(), onProgress);
+    async runAiReview(sessionId, onProgress, signal) {
+      return runAiReview(sessionId, getClient(), onProgress, signal);
     },
     async sendAnnotationChat(sessionId, context, body, path, thread, message) {
       return sendAnnotationChatMessage(sessionId, context, body, path, thread, message, getClient());
@@ -233,18 +233,26 @@ export function registerApiRoutes(app: Express, service: UiServerService): void 
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
+    const abort = new AbortController();
+    req.on("close", () => { abort.abort(); });
+
     const writeEvent = (event: string, data: unknown) => {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (!res.writableEnded) {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
     };
 
     try {
       const result = await service.runAiReview(
         req.params.id ?? "",
-        (message) => { writeEvent("progress", { message }); }
+        (message) => { writeEvent("progress", { message }); },
+        abort.signal
       );
       writeEvent("result", result);
     } catch (error) {
-      writeEvent("error", { error: error instanceof Error ? error.message : "Unknown error" });
+      if (!abort.signal.aborted) {
+        writeEvent("error", { error: error instanceof Error ? error.message : "Unknown error" });
+      }
     } finally {
       res.end();
     }
