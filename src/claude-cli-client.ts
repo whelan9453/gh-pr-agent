@@ -53,10 +53,7 @@ export class ClaudeCliClient {
 
       proc.on("close", (code) => {
         signal?.removeEventListener("abort", onAbort);
-        if (signal?.aborted) {
-          reject(new Error("Aborted"));
-          return;
-        }
+        if (signal?.aborted) return; // already rejected by onAbort
         if (code !== 0) {
           reject(new Error(`claude CLI exited with code ${code}: ${stderr.trim()}`));
           return;

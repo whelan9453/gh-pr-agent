@@ -11,7 +11,7 @@ loadDotenv({ path: join(process.cwd(), ".env") });
 
 import { createServer } from "node:http";
 import express from "express";
-import { resolveConfig } from "./config.js";
+import { buildClaudeCliConfig, resolveConfig } from "./config.js";
 import { createDefaultUiServerService, registerApiRoutes } from "./ui-server.js";
 import type { AppConfig, ModelPreset } from "./types.js";
 
@@ -32,25 +32,11 @@ if (azureFoundryApiKey) {
     config = resolveConfig({ model, githubToken, azureFoundryApiKey });
   } catch {
     process.stderr.write("Azure Foundry config incomplete — falling back to Claude Code CLI\n");
-    config = {
-      githubToken,
-      azureFoundryBaseUrl: "",
-      azureFoundryApiKey: "",
-      selectedModel: model,
-      deploymentName: "",
-      ...(claudeModel ? { claudeCliModel: claudeModel } : {})
-    };
+    config = buildClaudeCliConfig(githubToken, model, claudeModel);
   }
 } else {
   process.stderr.write("AZURE_FOUNDRY_API_KEY not set — using Claude Code CLI\n");
-  config = {
-    githubToken,
-    azureFoundryBaseUrl: "",
-    azureFoundryApiKey: "",
-    selectedModel: model,
-    deploymentName: "",
-    ...(claudeModel ? { claudeCliModel: claudeModel } : {})
-  };
+  config = buildClaudeCliConfig(githubToken, model, claudeModel);
 }
 const service = createDefaultUiServerService(config);
 const app = express();

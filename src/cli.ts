@@ -9,7 +9,7 @@ loadDotenv({ path: join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".e
 
 import { Command } from "commander";
 
-import { resolveConfig } from "./config.js";
+import { buildClaudeCliConfig, resolveConfig } from "./config.js";
 import {
   createWalkthroughSession,
   runSessionRepl,
@@ -152,14 +152,7 @@ async function resolveUiOptions(options: {
     return resolveConfig({ model, githubToken, azureFoundryApiKey });
   }
 
-  return {
-    githubToken,
-    azureFoundryBaseUrl: "",
-    azureFoundryApiKey: "",
-    selectedModel: model,
-    deploymentName: "",
-    ...(options.claudeModel !== undefined ? { claudeCliModel: options.claudeModel as string } : {})
-  };
+  return buildClaudeCliConfig(githubToken, model, options.claudeModel);
 }
 
 function buildProgram(): Command {

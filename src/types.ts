@@ -1,3 +1,5 @@
+import type { ClientBackend } from "./conversation-client.js";
+
 export type ModelPreset = "sonnet" | "haiku";
 export type ReviewCommentSide = "LEFT" | "RIGHT";
 export type DiffRowType = "hunk" | "context" | "add" | "del";
@@ -43,7 +45,7 @@ export interface AppConfig {
   azureFoundryApiKey: string;
   selectedModel: ModelPreset;
   deploymentName: string;
-  backend?: import("./conversation-client.js").ClientBackend;
+  backend?: ClientBackend;
   claudeCliModel?: string;
 }
 

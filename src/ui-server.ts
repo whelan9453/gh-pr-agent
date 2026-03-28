@@ -93,13 +93,15 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
     claudeCliModel: config.claudeCliModel ?? "claude-sonnet-4-6",
   };
 
-  const getClient = () => makeConversationClient({
+  let cachedClient = makeConversationClient({
     backend: settings.backend,
     azureFoundryBaseUrl: config.azureFoundryBaseUrl,
     azureFoundryApiKey: config.azureFoundryApiKey,
     deploymentName: config.deploymentName,
     claudeCliModel: settings.claudeCliModel,
   });
+
+  const getClient = () => cachedClient;
 
   return {
     async createSession(prUrl) {
@@ -133,6 +135,13 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
     },
     updateSettings(partial) {
       settings = { ...settings, ...partial };
+      cachedClient = makeConversationClient({
+        backend: settings.backend,
+        azureFoundryBaseUrl: config.azureFoundryBaseUrl,
+        azureFoundryApiKey: config.azureFoundryApiKey,
+        deploymentName: config.deploymentName,
+        claudeCliModel: settings.claudeCliModel,
+      });
     },
   };
 }

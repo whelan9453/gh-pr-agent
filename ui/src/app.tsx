@@ -107,9 +107,13 @@ export default function App(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const bootstrapped = useRef(false);
+  const pendingModelUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void getSettings().then(setBackendSettings).catch(() => {});
+    return () => {
+      if (pendingModelUpdate.current !== null) clearTimeout(pendingModelUpdate.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -270,11 +274,8 @@ export default function App(): JSX.Element {
     }
   }
 
-  const pendingModelUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   function handleBackendSettingsChange(partial: Partial<BackendSettings>): void {
     if ("claudeCliModel" in partial) {
-      // Debounce model name: only send after user stops typing for 500ms
       setBackendSettings((prev) => ({ ...prev, ...partial }));
       if (pendingModelUpdate.current !== null) clearTimeout(pendingModelUpdate.current);
       pendingModelUpdate.current = setTimeout(() => {

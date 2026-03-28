@@ -1,5 +1,20 @@
 import type { AppConfig, ModelPreset } from "./types.js";
 
+export function buildClaudeCliConfig(
+  githubToken: string,
+  model: ModelPreset,
+  claudeCliModel?: string
+): AppConfig {
+  return {
+    githubToken,
+    azureFoundryBaseUrl: "",
+    azureFoundryApiKey: "",
+    selectedModel: model,
+    deploymentName: "",
+    ...(claudeCliModel ? { claudeCliModel } : {})
+  };
+}
+
 interface ResolveConfigOptions {
   model: ModelPreset;
   githubToken: string;
