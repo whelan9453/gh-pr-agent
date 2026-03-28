@@ -271,7 +271,9 @@ export default function App(): JSX.Element {
 
   async function handleAddAnnotationDraft(annotation: AiReviewAnnotation, body: string): Promise<void> {
     if (!sessionId || !annotation.path || annotation.line == null) return;
-    const data = await loadFile(sessionId, annotation.path);
+    const data = fileData?.file.path === annotation.path && fileData
+      ? fileData
+      : await loadFile(sessionId, annotation.path);
     let row = data.file.diffRows.find(
       (r) => r.type !== "hunk" && r.rightSelectable && r.newLine === annotation.line
     );
@@ -414,13 +416,17 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const pendingScrollTarget = useRef<{ path: string; line: number } | null>(null);
   const [annotationStates, setAnnotationStates] = useState<Map<string, AnnotationCardState>>(new Map());
 
+  function defaultAnnotationState(defaultBody: string): AnnotationCardState {
+    return { expanded: false, thread: [], commentBody: defaultBody, sending: false, addingDraft: false, draftError: null, draftSuccess: false };
+  }
+
   function getAnnotationState(key: string, defaultBody: string): AnnotationCardState {
-    return annotationStates.get(key) ?? { expanded: false, thread: [], commentBody: defaultBody, sending: false, addingDraft: false, draftError: null, draftSuccess: false };
+    return annotationStates.get(key) ?? defaultAnnotationState(defaultBody);
   }
 
   function patchAnnotation(key: string, defaultBody: string, patch: Partial<AnnotationCardState>): void {
     setAnnotationStates((prev) => {
-      const current = prev.get(key) ?? { expanded: false, thread: [], commentBody: defaultBody, sending: false, addingDraft: false, draftError: null, draftSuccess: false };
+      const current = prev.get(key) ?? defaultAnnotationState(defaultBody);
       return new Map(prev).set(key, { ...current, ...patch });
     });
   }

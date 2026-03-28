@@ -311,6 +311,8 @@ export async function runAiReview(
 
   const { analysis, comments } = parseAiComments(raw);
 
+  // Reload artifacts after the (potentially long) LLM call to pick up any concurrent changes
+  // (e.g., drafts added by the user while the model was running) before overwriting chatHistory.
   const updated = loadArtifacts(sessionId);
   updated.chatHistory = [
     { role: "user", content: userMessage },

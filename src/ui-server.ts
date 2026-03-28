@@ -46,6 +46,14 @@ const submitReviewSchema = z.object({
   event: z.enum(["COMMENT", "APPROVE", "REQUEST_CHANGES"]).optional()
 });
 
+const annotationChatSchema = z.object({
+  context: z.string().min(1),
+  body: z.string(),
+  path: z.string().nullable(),
+  thread: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
+  message: z.string().min(1)
+});
+
 export interface UiServerService {
   createSession(prUrl: string): Promise<{ sessionId: string }>;
   getSessionOverview(sessionId: string): SessionOverview;
@@ -180,13 +188,7 @@ export function registerApiRoutes(app: Express, service: UiServerService): void 
 
   app.post("/api/sessions/:id/annotation-chat", async (req, res) => {
     await handleAsync(req, res, async () => {
-      const payload = z.object({
-        context: z.string().min(1),
-        body: z.string(),
-        path: z.string().nullable(),
-        thread: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
-        message: z.string().min(1)
-      }).parse(req.body);
+      const payload = annotationChatSchema.parse(req.body);
       res.json(await service.sendAnnotationChat(
         req.params.id ?? "",
         payload.context,
