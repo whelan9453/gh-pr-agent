@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FoundryConversationClient } from "./conversation-client.js";
+import { makeConversationClient } from "./conversation-client.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
 import { buildNumberedPatch } from "./diff-line-mapper.js";
 import { buildPrContextBlock, writeProgress } from "./interactive-session.js";
@@ -146,11 +146,13 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
   const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
 
   writeProgress("Generating summary...");
-  const client = new FoundryConversationClient(
-    opts.azureFoundryBaseUrl,
-    opts.azureFoundryApiKey,
-    opts.deploymentName
-  );
+  const client = makeConversationClient({
+    ...(opts.backend !== undefined ? { backend: opts.backend } : {}),
+    azureFoundryBaseUrl: opts.azureFoundryBaseUrl,
+    azureFoundryApiKey: opts.azureFoundryApiKey,
+    deploymentName: opts.deploymentName,
+    ...(opts.claudeCliModel !== undefined ? { claudeCliModel: opts.claudeCliModel } : {}),
+  });
 
   const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
 

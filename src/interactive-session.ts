@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadPrompt } from "./prompt-loader.js";
 import { renderToTerminal } from "./terminal-renderer.js";
-import { FoundryConversationClient } from "./conversation-client.js";
+import { makeConversationClient, type ClientBackend } from "./conversation-client.js";
 import { parseCommand } from "./command-parser.js";
 import { buildAsciiTree } from "./ascii-tree.js";
 import { loadArtifacts, saveSession } from "./session-store.js";
@@ -33,6 +33,8 @@ export interface InteractiveOptions {
   azureFoundryBaseUrl: string;
   azureFoundryApiKey: string;
   deploymentName: string;
+  backend?: ClientBackend;
+  claudeCliModel?: string;
   promptFile?: string;
   verbose?: boolean;
 }
@@ -264,11 +266,13 @@ export async function runSessionRepl(
 ): Promise<void> {
   const artifacts = loadArtifacts(session.id);
 
-  const convClient = new FoundryConversationClient(
-    opts.azureFoundryBaseUrl,
-    opts.azureFoundryApiKey,
-    opts.deploymentName
-  );
+  const convClient = makeConversationClient({
+    ...(opts.backend !== undefined ? { backend: opts.backend } : {}),
+    azureFoundryBaseUrl: opts.azureFoundryBaseUrl,
+    azureFoundryApiKey: opts.azureFoundryApiKey,
+    deploymentName: opts.deploymentName,
+    ...(opts.claudeCliModel !== undefined ? { claudeCliModel: opts.claudeCliModel } : {}),
+  });
 
   // Load prompt for system prompt
   const promptPath = opts.promptFile ?? resolveSessionPromptPath();

@@ -130,6 +130,9 @@ describe("ReviewWorkspace", () => {
         savingDraft={false}
         submittingReview={false}
         runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6" }}
+        onBackendSettingsChange={vi.fn()}
         sendingChat={false}
         chatMessages={[]}
         reviewBody=""
@@ -141,6 +144,8 @@ describe("ReviewWorkspace", () => {
         onSubmitReview={vi.fn().mockResolvedValue(undefined)}
         onRunAiReview={vi.fn().mockResolvedValue(undefined)}
         onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
       />
     );
 

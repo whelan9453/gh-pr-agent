@@ -18,7 +18,7 @@ import {
 import { summarizePr } from "./summarize-pr.js";
 import { loadSession } from "./session-store.js";
 import { startUiServer } from "./ui-server.js";
-import type { ModelPreset } from "./types.js";
+import type { AppConfig, ModelPreset } from "./types.js";
 
 function readEnvSecret(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -84,6 +84,8 @@ async function resolveInteractiveOptions(options: {
   promptFile?: string;
   promptForGithubToken?: boolean;
   promptForAzureKey?: boolean;
+  useFoundry?: boolean;
+  claudeModel?: string;
 }): Promise<InteractiveOptions> {
   const model = parseModelPreset(options.model);
 
@@ -92,45 +94,72 @@ async function resolveInteractiveOptions(options: {
     Boolean(options.promptForGithubToken),
     "GitHub token"
   );
-  const azureFoundryApiKey = await resolveSecret(
-    "AZURE_FOUNDRY_API_KEY",
-    Boolean(options.promptForAzureKey),
-    "Azure Foundry API key"
-  );
 
-  const config = resolveConfig({ model, githubToken, azureFoundryApiKey });
+  if (options.useFoundry) {
+    const azureFoundryApiKey = await resolveSecret(
+      "AZURE_FOUNDRY_API_KEY",
+      Boolean(options.promptForAzureKey),
+      "Azure Foundry API key"
+    );
+    const config = resolveConfig({ model, githubToken, azureFoundryApiKey });
+    const result: InteractiveOptions = {
+      model,
+      githubToken,
+      azureFoundryBaseUrl: config.azureFoundryBaseUrl,
+      azureFoundryApiKey,
+      deploymentName: config.deploymentName,
+      backend: "foundry" as const,
+      verbose: Boolean(options.verbose)
+    };
+    if (options.promptFile) {
+      result.promptFile = path.resolve(options.promptFile);
+    }
+    return result;
+  }
 
-  const result: InteractiveOptions = {
+  return {
     model,
     githubToken,
-    azureFoundryBaseUrl: config.azureFoundryBaseUrl,
-    azureFoundryApiKey,
-    deploymentName: config.deploymentName,
-    verbose: Boolean(options.verbose)
+    azureFoundryBaseUrl: "",
+    azureFoundryApiKey: "",
+    deploymentName: "",
+    ...(options.claudeModel !== undefined ? { claudeCliModel: options.claudeModel as string } : {}),
+    verbose: Boolean(options.verbose),
+    ...(options.promptFile ? { promptFile: path.resolve(options.promptFile) } : {})
   };
-  if (options.promptFile) {
-    result.promptFile = path.resolve(options.promptFile);
-  }
-  return result;
 }
 
 async function resolveUiOptions(options: {
   model?: string;
   promptForGithubToken?: boolean;
   promptForAzureKey?: boolean;
-}): Promise<ReturnType<typeof resolveConfig>> {
+  useFoundry?: boolean;
+  claudeModel?: string;
+}): Promise<AppConfig> {
   const model = parseModelPreset(options.model);
   const githubToken = await resolveSecret(
     "GITHUB_TOKEN",
     Boolean(options.promptForGithubToken),
     "GitHub token"
   );
-  const azureFoundryApiKey = await resolveSecret(
-    "AZURE_FOUNDRY_API_KEY",
-    Boolean(options.promptForAzureKey),
-    "Azure Foundry API key"
-  );
-  return resolveConfig({ model, githubToken, azureFoundryApiKey });
+
+  if (options.useFoundry) {
+    const azureFoundryApiKey = await resolveSecret(
+      "AZURE_FOUNDRY_API_KEY",
+      Boolean(options.promptForAzureKey),
+      "Azure Foundry API key"
+    );
+    return resolveConfig({ model, githubToken, azureFoundryApiKey });
+  }
+
+  return {
+    githubToken,
+    azureFoundryBaseUrl: "",
+    azureFoundryApiKey: "",
+    selectedModel: model,
+    deploymentName: "",
+    ...(options.claudeModel !== undefined ? { claudeCliModel: options.claudeModel as string } : {})
+  };
 }
 
 function buildProgram(): Command {
@@ -147,6 +176,8 @@ function buildProgram(): Command {
     .option("--verbose", "Show detailed progress logs")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .action(async (prUrl: string | undefined, options) => {
       if (!prUrl) {
         program.help();
@@ -166,6 +197,8 @@ function buildProgram(): Command {
     .option("--verbose", "Show detailed progress logs")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .action(async (prUrl: string, options) => {
       const interactiveOpts = await resolveInteractiveOptions(options);
       const session = await createWalkthroughSession(prUrl, interactiveOpts);
@@ -178,6 +211,8 @@ function buildProgram(): Command {
     .argument("<session-id>", "Session ID to resume")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .action(async (sessionId: string, options) => {
       const session = loadSession(sessionId);
       if (session.mode !== "walkthrough") {
@@ -196,6 +231,8 @@ function buildProgram(): Command {
     .option("--model <preset>", "Stored model label for the review session", "haiku")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .action(async (prUrl: string | undefined, options) => {
       const config = await resolveUiOptions(options);
       const url = await startUiServer({
@@ -213,6 +250,8 @@ function buildProgram(): Command {
     .option("--verbose", "Show detailed progress logs")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
+    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .action(async (prUrl: string, options) => {
       const interactiveOpts = await resolveInteractiveOptions(options);
       await summarizePr(prUrl, interactiveOpts);

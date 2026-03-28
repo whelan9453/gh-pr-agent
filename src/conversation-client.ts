@@ -1,5 +1,29 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ConversationMessage } from "./types.js";
+import { ClaudeCliClient } from "./claude-cli-client.js";
+
+export interface ConversationClient {
+  send(system: string, messages: ConversationMessage[], maxTokens?: number): Promise<string>;
+}
+
+export type ClientBackend = "foundry" | "claude-cli";
+
+export function makeConversationClient(opts: {
+  backend?: ClientBackend;
+  azureFoundryBaseUrl?: string;
+  azureFoundryApiKey?: string;
+  deploymentName?: string;
+  claudeCliModel?: string;
+}): ConversationClient {
+  if (opts.backend === "foundry") {
+    return new FoundryConversationClient(
+      opts.azureFoundryBaseUrl!,
+      opts.azureFoundryApiKey!,
+      opts.deploymentName!
+    );
+  }
+  return new ClaudeCliClient(opts.claudeCliModel);
+}
 
 function toSdkBaseUrl(raw: string): string {
   return raw.replace(/\/+$/, "").replace(/\/v1\/messages$/, "").replace(/\/v1$/, "");

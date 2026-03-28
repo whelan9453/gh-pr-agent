@@ -11,6 +11,7 @@ import type { JSX } from "react";
 import {
   createSession,
   deleteDraft,
+  getSettings,
   loadFile,
   loadSession,
   persistReviewSummary,
@@ -18,9 +19,10 @@ import {
   saveDraft,
   sendAnnotationChat,
   sendChatMessage,
-  submitReview
+  submitReview,
+  updateSettings
 } from "./api";
-import type { AiReviewAnnotation, ChatMessage } from "./api";
+import type { AiReviewAnnotation, BackendSettings, ChatMessage } from "./api";
 import type {
   DiffRow,
   DraftPayload,
@@ -66,6 +68,9 @@ interface ReviewWorkspaceProps {
   savingDraft: boolean;
   submittingReview: boolean;
   runningAiReview: boolean;
+  aiReviewStatus: string;
+  backendSettings: BackendSettings;
+  onBackendSettingsChange: (settings: Partial<BackendSettings>) => void;
   sendingChat: boolean;
   reviewBody: string;
   chatMessages: ChatMessage[];
@@ -95,11 +100,17 @@ export default function App(): JSX.Element {
   const [savingDraft, setSavingDraft] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
   const [runningAiReview, setRunningAiReview] = useState(false);
+  const [aiReviewStatus, setAiReviewStatus] = useState("");
+  const [backendSettings, setBackendSettings] = useState<BackendSettings>({ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6" });
   const [sendingChat, setSendingChat] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const bootstrapped = useRef(false);
+
+  useEffect(() => {
+    void getSettings().then(setBackendSettings).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (bootstrapped.current) {
@@ -240,8 +251,9 @@ export default function App(): JSX.Element {
     if (!sessionId) return;
     try {
       setRunningAiReview(true);
+      setAiReviewStatus("");
       setError(null);
-      const result = await runAiReview(sessionId);
+      const result = await runAiReview(sessionId, setAiReviewStatus);
       await refreshSession(sessionId);
       // refreshSession overwrites chatMessages from server (no annotations), so re-attach them now
       setChatMessages((prev) => {
@@ -254,7 +266,14 @@ export default function App(): JSX.Element {
       setError(error instanceof Error ? error.message : "Unable to run AI review.");
     } finally {
       setRunningAiReview(false);
+      setAiReviewStatus("");
     }
+  }
+
+  function handleBackendSettingsChange(partial: Partial<BackendSettings>): void {
+    void updateSettings(partial).then(setBackendSettings).catch((err) => {
+      setError(err instanceof Error ? err.message : "Failed to update settings");
+    });
   }
 
   async function handleSendAnnotationMessage(
@@ -370,6 +389,9 @@ export default function App(): JSX.Element {
           savingDraft={savingDraft}
           submittingReview={submittingReview}
           runningAiReview={runningAiReview}
+          aiReviewStatus={aiReviewStatus}
+          backendSettings={backendSettings}
+          onBackendSettingsChange={handleBackendSettingsChange}
           sendingChat={sendingChat}
           chatMessages={chatMessages}
           reviewBody={reviewBody}
@@ -856,6 +878,27 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
         <div className="sidebar-card">
           <p className="eyebrow">AI Review</p>
           <p className="meta-line">用 pr-summary 提示自動產生 draft comments。</p>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+            <label style={{ fontSize: "0.75rem", color: "var(--color-muted, #888)" }}>後端</label>
+            <select
+              value={props.backendSettings.backend}
+              disabled={props.runningAiReview}
+              onChange={(e) => props.onBackendSettingsChange({ backend: e.target.value as "claude-cli" | "foundry" })}
+              style={{ fontSize: "0.75rem", padding: "2px 4px" }}
+            >
+              <option value="claude-cli">Claude CLI</option>
+              <option value="foundry">Azure Foundry</option>
+            </select>
+            {props.backendSettings.backend === "claude-cli" && (
+              <input
+                type="text"
+                value={props.backendSettings.claudeCliModel}
+                disabled={props.runningAiReview}
+                onChange={(e) => props.onBackendSettingsChange({ claudeCliModel: e.target.value })}
+                style={{ fontSize: "0.75rem", padding: "2px 4px", width: "160px" }}
+              />
+            )}
+          </div>
           <button
             type="button"
             disabled={props.runningAiReview}
@@ -863,6 +906,11 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
           >
             {props.runningAiReview ? "分析中..." : "執行 AI Review"}
           </button>
+          {props.aiReviewStatus && (
+            <p className="meta-line" style={{ marginTop: "6px", fontStyle: "italic" }}>
+              {props.aiReviewStatus}
+            </p>
+          )}
         </div>
 
         <div className="review-section chat-section">

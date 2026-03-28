@@ -13,23 +13,33 @@ import { createServer } from "node:http";
 import express from "express";
 import { resolveConfig } from "./config.js";
 import { createDefaultUiServerService, registerApiRoutes } from "./ui-server.js";
-import type { ModelPreset } from "./types.js";
+import type { AppConfig, ModelPreset } from "./types.js";
 
 const PORT = 3001;
 const githubToken = process.env.GITHUB_TOKEN?.trim();
 const azureFoundryApiKey = process.env.AZURE_FOUNDRY_API_KEY?.trim();
 const model = (process.env.MODEL_PRESET ?? "haiku") as ModelPreset;
+const claudeModel = process.env.CLAUDE_MODEL?.trim();
 
 if (!githubToken) {
   process.stderr.write("GITHUB_TOKEN is not set in .env\n");
   process.exit(1);
 }
-if (!azureFoundryApiKey) {
-  process.stderr.write("AZURE_FOUNDRY_API_KEY is not set in .env\n");
-  process.exit(1);
-}
 
-const config = resolveConfig({ model, githubToken, azureFoundryApiKey });
+let config: AppConfig;
+if (azureFoundryApiKey) {
+  config = resolveConfig({ model, githubToken, azureFoundryApiKey });
+} else {
+  process.stderr.write("AZURE_FOUNDRY_API_KEY not set — using Claude Code CLI\n");
+  config = {
+    githubToken,
+    azureFoundryBaseUrl: "",
+    azureFoundryApiKey: "",
+    selectedModel: model,
+    deploymentName: "",
+    ...(claudeModel ? { claudeCliModel: claudeModel } : {})
+  };
+}
 const service = createDefaultUiServerService(config);
 const app = express();
 app.use(express.json({ limit: "1mb" }));

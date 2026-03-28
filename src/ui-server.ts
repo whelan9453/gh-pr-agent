@@ -19,8 +19,13 @@ import {
   type SessionOverview
 } from "./review-session.js";
 import { loadArtifacts } from "./session-store.js";
-import { FoundryConversationClient } from "./conversation-client.js";
+import { makeConversationClient, type ClientBackend } from "./conversation-client.js";
 import type { AppConfig, DraftComment, FileMaterial, ModelPreset, ReviewSubmissionPayload } from "./types.js";
+
+export interface BackendSettings {
+  backend: ClientBackend;
+  claudeCliModel: string;
+}
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -65,9 +70,11 @@ export interface UiServerService {
     sessionId: string,
     payload: ReviewSubmissionPayload
   ): Promise<{ url: string; drafts: DraftComment[] }>;
-  runAiReview(sessionId: string): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }>;
+  runAiReview(sessionId: string, onProgress?: (message: string) => void): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }>;
   sendAnnotationChat(sessionId: string, context: string, body: string, path: string | null, thread: Array<{ role: "user" | "assistant"; content: string }>, message: string): Promise<{ reply: string }>;
   sendChatMessage(sessionId: string, message: string): Promise<{ reply: string }>;
+  getSettings(): BackendSettings;
+  updateSettings(settings: Partial<BackendSettings>): void;
 }
 
 interface CreateUiServerOptions {
@@ -81,11 +88,19 @@ export interface StartUiServerOptions {
 }
 
 export function createDefaultUiServerService(config: AppConfig): UiServerService {
-  const client = new FoundryConversationClient(
-    config.azureFoundryBaseUrl,
-    config.azureFoundryApiKey,
-    config.deploymentName
-  );
+  let settings: BackendSettings = {
+    backend: config.backend ?? "claude-cli",
+    claudeCliModel: config.claudeCliModel ?? "claude-sonnet-4-6",
+  };
+
+  const getClient = () => makeConversationClient({
+    backend: settings.backend,
+    azureFoundryBaseUrl: config.azureFoundryBaseUrl,
+    azureFoundryApiKey: config.azureFoundryApiKey,
+    deploymentName: config.deploymentName,
+    claudeCliModel: settings.claudeCliModel,
+  });
+
   return {
     async createSession(prUrl) {
       const session = await createSavedSession(prUrl, config.githubToken, config.selectedModel, "ui-review");
@@ -104,19 +119,51 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
       const result = await submitReview(sessionId, config.githubToken, payload);
       return { url: result.url, drafts: result.artifacts.drafts };
     },
-    async runAiReview(sessionId) {
-      return runAiReview(sessionId, client);
+    async runAiReview(sessionId, onProgress) {
+      return runAiReview(sessionId, getClient(), onProgress);
     },
     async sendAnnotationChat(sessionId, context, body, path, thread, message) {
-      return sendAnnotationChatMessage(sessionId, context, body, path, thread, message, client);
+      return sendAnnotationChatMessage(sessionId, context, body, path, thread, message, getClient());
     },
     async sendChatMessage(sessionId, message) {
-      return sendChatMessage(sessionId, message, client);
-    }
+      return sendChatMessage(sessionId, message, getClient());
+    },
+    getSettings() {
+      return { ...settings };
+    },
+    updateSettings(partial) {
+      settings = { ...settings, ...partial };
+    },
   };
 }
 
+const settingsUpdateSchema = z.object({
+  backend: z.enum(["claude-cli", "foundry"]).optional(),
+  claudeCliModel: z.string().min(1).optional(),
+});
+
 export function registerApiRoutes(app: Express, service: UiServerService): void {
+  app.get("/api/settings", (_req, res) => {
+    res.json(service.getSettings());
+  });
+
+  app.patch("/api/settings", (req, res) => {
+    try {
+      const raw = settingsUpdateSchema.parse(req.body);
+      const payload: Partial<BackendSettings> = {};
+      if (raw.backend !== undefined) payload.backend = raw.backend;
+      if (raw.claudeCliModel !== undefined) payload.claudeCliModel = raw.claudeCliModel;
+      service.updateSettings(payload);
+      res.json(service.getSettings());
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.issues.map((i) => i.message).join("; ") });
+        return;
+      }
+      res.status(400).json({ error: "Invalid settings" });
+    }
+  });
+
   app.post("/api/sessions", async (req, res) => {
     await handleAsync(req, res, async () => {
       const payload = createSessionSchema.parse(req.body);
@@ -181,9 +228,26 @@ export function registerApiRoutes(app: Express, service: UiServerService): void 
   });
 
   app.post("/api/sessions/:id/ai-review", async (req, res) => {
-    await handleAsync(req, res, async () => {
-      res.json(await service.runAiReview(req.params.id ?? ""));
-    });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const writeEvent = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const result = await service.runAiReview(
+        req.params.id ?? "",
+        (message) => { writeEvent("progress", { message }); }
+      );
+      writeEvent("result", result);
+    } catch (error) {
+      writeEvent("error", { error: error instanceof Error ? error.message : "Unknown error" });
+    } finally {
+      res.end();
+    }
   });
 
   app.post("/api/sessions/:id/annotation-chat", async (req, res) => {

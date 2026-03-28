@@ -5,7 +5,7 @@ import { buildNumberedPatch } from "./diff-line-mapper.js";
 import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
 import { loadPrompt } from "./prompt-loader.js";
 import { buildPrContextBlock } from "./interactive-session.js";
-import { FoundryConversationClient } from "./conversation-client.js";
+import type { ConversationClient } from "./conversation-client.js";
 import {
   generateSessionId,
   loadArtifacts,
@@ -270,7 +270,7 @@ export async function sendAnnotationChatMessage(
   annotationPath: string | null,
   thread: Array<{ role: "user" | "assistant"; content: string }>,
   userMessage: string,
-  client: FoundryConversationClient
+  client: ConversationClient
 ): Promise<{ reply: string }> {
   const artifacts = loadArtifacts(sessionId);
   let fileContext = "";
@@ -299,16 +299,26 @@ export async function sendAnnotationChatMessage(
 
 export async function runAiReview(
   sessionId: string,
-  client: FoundryConversationClient
+  client: ConversationClient,
+  onProgress?: (message: string) => void
 ): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }> {
+  onProgress?.("載入 PR 資料...");
   const session = loadSession(sessionId);
   const artifacts = loadArtifacts(sessionId);
+
+  onProgress?.("載入分析提示詞...");
   const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
 
+  const fileCount = artifacts.files.length;
+  const totalChanges = artifacts.files.reduce((s, f) => s + f.additions + f.deletions, 0);
+  onProgress?.(`組合差異內容（${fileCount} 個檔案，${totalChanges} 行變更）...`);
   const userMessage = buildAiReviewMessage(session, artifacts);
   const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
+
+  onProgress?.("傳送至 Claude，等待回應...");
   const raw = await client.send(systemPrompt, messages, 8192);
 
+  onProgress?.("解析分析結果...");
   const { analysis, comments } = parseAiComments(raw);
 
   // Reload artifacts after the (potentially long) LLM call to pick up any concurrent changes
@@ -326,7 +336,7 @@ export async function runAiReview(
 export async function sendChatMessage(
   sessionId: string,
   message: string,
-  client: FoundryConversationClient
+  client: ConversationClient
 ): Promise<{ reply: string }> {
   const artifacts = loadArtifacts(sessionId);
   const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));

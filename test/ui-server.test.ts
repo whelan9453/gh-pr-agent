@@ -135,7 +135,9 @@ describe("createUiApp", () => {
       submitReview: vi.fn().mockResolvedValue({ url: "https://github.com/review/1", drafts: [] }),
       runAiReview: vi.fn().mockResolvedValue({ analysis: "LGTM", draftCount: 0, comments: [] }),
       sendAnnotationChat: vi.fn().mockResolvedValue({ reply: "ok" }),
-      sendChatMessage: vi.fn().mockResolvedValue({ reply: "ok" })
+      sendChatMessage: vi.fn().mockResolvedValue({ reply: "ok" }),
+      getSettings: vi.fn().mockReturnValue({ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6" }),
+      updateSettings: vi.fn()
     };
     const app = createUiApp({ service, staticDir: makeStaticDir() });
 

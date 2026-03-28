@@ -43,6 +43,8 @@ export interface AppConfig {
   azureFoundryApiKey: string;
   selectedModel: ModelPreset;
   deploymentName: string;
+  backend?: import("./conversation-client.js").ClientBackend;
+  claudeCliModel?: string;
 }
 
 // ── Interactive session types ─────────────────────────────────────────────
