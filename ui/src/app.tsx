@@ -1046,9 +1046,24 @@ interface ChatPanelProps {
   annotationHandlers: AnnotationHandlers;
 }
 
+function shouldSubmitTextareaOnEnter(
+  event: React.KeyboardEvent<HTMLTextAreaElement>,
+  isComposingRef: React.RefObject<boolean>
+): boolean {
+  if (event.key !== "Enter" || event.shiftKey) {
+    return false;
+  }
+  const nativeEvent = event.nativeEvent as KeyboardEvent & {
+    isComposing?: boolean;
+    keyCode?: number;
+  };
+  return !isComposingRef.current && nativeEvent.isComposing !== true && nativeEvent.keyCode !== 229;
+}
+
 function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isComposingRef = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1099,10 +1114,16 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false;
+          }}
           placeholder="問關於這個 PR 的問題..."
           rows={3}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (shouldSubmitTextareaOnEnter(e, isComposingRef)) {
               e.preventDefault();
               handleSubmit(e);
             }
@@ -1130,6 +1151,7 @@ function AnnotationCard({
   const cardKey = `${msgIdx}-${annIdx}`;
   const state = handlers.getState(cardKey, annotation.body);
   const [chatInput, setChatInput] = useState("");
+  const isComposingRef = useRef(false);
   const hasLocation = annotation.path != null;
   const severityLabel = annotation.severity === "must-fix" ? "必須修正" : "建議改善";
 
@@ -1191,11 +1213,17 @@ function AnnotationCard({
             <textarea
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                isComposingRef.current = false;
+              }}
               placeholder="針對這個問題提問..."
               rows={2}
               disabled={state.sending}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (shouldSubmitTextareaOnEnter(e, isComposingRef)) {
                   e.preventDefault();
                   void handleSendChat();
                 }

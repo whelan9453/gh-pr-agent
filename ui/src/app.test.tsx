@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReviewWorkspace } from "./app";
 import type { AiReviewAnnotation, FileResponse, SessionOverviewResponse } from "./types";
+
+afterEach(() => {
+  cleanup();
+});
 
 function makeSession(): SessionOverviewResponse {
   return {
@@ -234,5 +238,106 @@ describe("ReviewWorkspace", () => {
 
     resolveReply("看起來大致修正了，但還要補 enum 驗證。");
     expect(await screen.findByText("看起來大致修正了，但還要補 enum 驗證。")).toBeTruthy();
+  });
+
+  it("does not submit the main chat while IME composition is active", async () => {
+    const onSendChatMessage = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ReviewWorkspace
+        session={makeSession()}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={onSendChatMessage}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText("問關於這個 PR 的問題...") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "為什麼這次的must fix你上次不一起講" } });
+
+    fireEvent.compositionStart(textarea);
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 229, which: 229, isComposing: true });
+    expect(onSendChatMessage).not.toHaveBeenCalled();
+    expect(textarea.value).toBe("為什麼這次的must fix你上次不一起講");
+
+    fireEvent.compositionEnd(textarea);
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 13, which: 13 });
+    expect(onSendChatMessage).toHaveBeenCalledWith("為什麼這次的must fix你上次不一起講");
+    expect(textarea.value).toBe("");
+  });
+
+  it("does not submit annotation chat while IME composition is active", async () => {
+    const user = userEvent.setup();
+    const onSendAnnotationMessage = vi.fn().mockResolvedValue("已確認");
+
+    render(
+      <ReviewWorkspace
+        session={{
+          ...makeSession(),
+          chatMessages: [{ role: "assistant", content: "Review result", annotations: [makeAnnotation()] }]
+        }}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[{ role: "assistant", content: "Review result", annotations: [makeAnnotation()] }]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={onSendAnnotationMessage}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "▼ 討論 / 新增留言" }));
+    const textarea = screen.getByPlaceholderText("針對這個問題提問...") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "你上次不一起講" } });
+
+    fireEvent.compositionStart(textarea);
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 229, which: 229, isComposing: true });
+    expect(onSendAnnotationMessage).not.toHaveBeenCalled();
+    expect(textarea.value).toBe("你上次不一起講");
+
+    fireEvent.compositionEnd(textarea);
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 13, which: 13 });
+    expect(onSendAnnotationMessage).toHaveBeenCalledWith(
+      "Leave allocation API validation",
+      "建議在 schema 層就限制 `type` 只能是合法 leave type。",
+      "src/app.ts",
+      [],
+      "你上次不一起講"
+    );
+    expect(textarea.value).toBe("");
   });
 });
