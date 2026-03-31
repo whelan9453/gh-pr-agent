@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildNumberedContext, buildNumberedPatch, truncateText } from "../src/diff-line-mapper.js";
+import { buildNumberedContext, buildNumberedPatch, truncateText } from "../src/utils/diff-line-mapper.js";
 
 describe("buildNumberedPatch", () => {
   it("maps new lines and changed lines", () => {

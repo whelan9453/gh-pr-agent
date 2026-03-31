@@ -1,139 +1,141 @@
 # gh-pr-agent
 
-`gh-pr-agent` is a local CLI for reviewing GitHub pull requests with Claude, Codex CLI, or Azure Foundry.
+A local CLI and web UI for reviewing GitHub pull requests with AI. Supports Claude CLI, Codex CLI, and Azure Foundry as backends.
 
 ## Features
 
-- Review private GitHub PRs with GitHub PATs
-- Use local Claude CLI or Codex CLI from the AI Review panel, with Codex CLI as the default
-- Use Azure Foundry Claude deployments
-- Generate per-file change highlights and possible issues with line numbers
-- Save structured JSON output for future GitHub comment automation
-- Open a local PR review web UI with split diff, draft comments, and GitHub review submission
+- **Interactive walkthrough** — step through each changed file with AI commentary in your terminal
+- **Quick summary** — surface major issues in a PR without a full walkthrough
+- **Web UI** — split diff view with draft inline comments, review summary, and one-click GitHub submission
+- **Multiple AI backends** — Codex CLI (default), Claude CLI, or Azure Foundry
+- Works with private repos via GitHub PAT
 
 ## Requirements
 
 - Node.js 22 LTS or 24 LTS
-- A GitHub PAT with access to the target private repository
-- An Azure Foundry resource with a Claude deployment
+- A GitHub PAT with read access to the target repository
+- At least one AI backend:
+  - [Codex CLI](https://github.com/openai/codex) (default)
+  - [Claude CLI](https://github.com/anthropics/claude-code)
+  - Azure Foundry with a Claude deployment
 
 ## Setup
 
 ```bash
-cd /Users/whelan/repo/gh-pr-agent
-npm run setup-local
-```
-
-After that, you can run:
-
-```bash
-gh-pr-review https://github.com/OWNER/REPO/pull/123
-```
-
-The CLI prints progress updates to `stderr` while the final review stays on `stdout`.
-
-For contributors who do not want a global command on `PATH`, the manual flow is:
-
-```bash
 npm install
 npm run build
-node dist/src/cli.js https://github.com/OWNER/REPO/pull/123
 ```
 
-Useful local scripts:
-
-```bash
-npm run ui       # build + launch the local web UI
-npm run dev:cli  # run the CLI directly from source
-npm run dev:ui   # run the frontend dev server only
-```
-
-For local use, the fastest setup is:
+Copy the example env file and fill in your secrets:
 
 ```bash
 cp .env.example .env
 ```
 
-Then paste your local secrets into `.env`. The file is gitignored.
+Then run directly:
+
+```bash
+node dist/src/cli.js <pr-url>
+```
+
+Or link globally for a shorter command:
+
+```bash
+npm link
+gh-pr-review <pr-url>
+```
 
 ## Configuration
 
-Required:
+Set these in `.env` (the CLI auto-loads it at startup):
 
-- `GITHUB_TOKEN`
-- `AZURE_FOUNDRY_BASE_URL`
-- `AZURE_FOUNDRY_API_KEY`
-- `AZURE_FOUNDRY_HAIKU_DEPLOYMENT` or `AZURE_FOUNDRY_SONNET_DEPLOYMENT`
+| Variable | Required | Description |
+|---|---|---|
+| `GITHUB_TOKEN` | Yes | GitHub PAT with repo read access |
+| `AZURE_FOUNDRY_BASE_URL` | Azure only | e.g. `https://<resource>.services.ai.azure.com/anthropic` |
+| `AZURE_FOUNDRY_API_KEY` | Azure only | Azure Foundry API key |
+| `AZURE_FOUNDRY_HAIKU_DEPLOYMENT` | Azure only | Deployment name for haiku model |
+| `AZURE_FOUNDRY_SONNET_DEPLOYMENT` | Azure only | Deployment name for sonnet model |
 
-Optional:
+## Commands
 
-- `PR_REVIEW_PROMPT_FILE`
+### `gh-pr-review <pr-url>` — interactive walkthrough (default)
 
-The CLI auto-loads `.env` at startup.
-
-`AZURE_FOUNDRY_BASE_URL` should look like:
-
-```text
-https://<resource>.services.ai.azure.com/anthropic
-```
-
-## Usage
+Steps through each changed file one by one. Responds in Traditional Chinese by default.
 
 ```bash
 gh-pr-review https://github.com/OWNER/REPO/pull/123
 ```
 
-Prompt for hidden secrets when env vars are unset:
+Navigate with:
+- `next` / `ok` / `continue` — move to next file
+- `jump <file-path>` — jump to a specific file
+- `status` — show current position
+- `exit` — save and quit
+
+### `gh-pr-review walkthrough <pr-url>`
+
+Same as the default command, with explicit subcommand syntax.
 
 ```bash
-gh-pr-review https://github.com/OWNER/REPO/pull/123 --prompt-for-github-token --prompt-for-azure-key
+gh-pr-review walkthrough https://github.com/OWNER/REPO/pull/123 --model sonnet
 ```
 
-Choose a different deployment preset:
+### `gh-pr-review resume <session-id>`
+
+Resume a previously saved walkthrough session.
 
 ```bash
-gh-pr-review https://github.com/OWNER/REPO/pull/123 --model haiku
-gh-pr-review https://github.com/OWNER/REPO/pull/123 --model sonnet
+gh-pr-review resume m1a2b3-xyz456
 ```
 
-Launch the local review UI:
+### `gh-pr-review summary <pr-url>`
+
+Non-interactive mode. Generates a PR summary and optionally posts inline comments to GitHub.
+
+```bash
+gh-pr-review summary https://github.com/OWNER/REPO/pull/123
+```
+
+After the summary, available commands: `post`, `approve`, `exit`.
+
+### `gh-pr-review ui [pr-url]`
+
+Opens the local web UI in your browser. Supports split diff, draft comments, AI review, and GitHub review submission.
 
 ```bash
 gh-pr-review ui
-```
-
-Or open the UI with a PR URL prefilled:
-
-```bash
 gh-pr-review ui https://github.com/OWNER/REPO/pull/123
 ```
 
-The UI opens in your browser, caches PR review data under `.gh-pr-agent/sessions`, lets you create local draft comments on diff ranges, and posts the final review back to GitHub in one submission. Stored sessions are pruned automatically to keep only the most recent 30 days and at most 100 sessions.
+Session data is cached under `.gh-pr-agent/sessions/` and pruned automatically (30-day window, max 100 sessions).
 
-Write JSON output:
+## Options
+
+All commands accept:
+
+| Flag | Description |
+|---|---|
+| `--model <preset>` | `haiku` (default) or `sonnet` |
+| `--use-foundry` | Use Azure Foundry instead of local CLI |
+| `--claude-model <model-id>` | Claude model ID for Claude CLI backend (default: `claude-sonnet-4-6`) |
+| `--prompt-file <path>` | Path to a custom prompt file (walkthrough only) |
+| `--prompt-for-github-token` | Prompt for GitHub token if env var is unset |
+| `--prompt-for-azure-key` | Prompt for Azure key if env var is unset |
+| `--verbose` | Show detailed progress logs |
+
+## Development
 
 ```bash
-gh-pr-review https://github.com/OWNER/REPO/pull/123 --json-output review-output/pr-123.json
+npm run dev       # start API server + Vite frontend dev server
+npm test          # run tests
+npm run typecheck # type-check src and UI
 ```
-
-Show more detailed progress logs:
-
-```bash
-gh-pr-review https://github.com/OWNER/REPO/pull/123 --verbose
-```
-
-Use a custom review prompt:
-
-```bash
-gh-pr-review https://github.com/OWNER/REPO/pull/123 --prompt-file /absolute/path/to/review_prompt.md
-```
-
-The built-in default prompt is [`prompts/branch-diff-walkthrough.md`](/Users/whelan/repo/gh-pr-agent/prompts/branch-diff-walkthrough.md).
 
 ## Security Notes
 
-- Do not paste PATs or API keys into terminal commands. They end up in shell history and process lists.
-- Do not commit `.env` files or plaintext tokens to the repository.
+- Do not paste tokens into terminal commands — they appear in shell history and process lists.
+- Do not commit `.env` to the repository (it is gitignored).
 - Rotate leaked credentials immediately.
-- Prefer fine-grained GitHub PATs with minimum repo permissions and short expiration.
-- For production or shared deployments, prefer Microsoft Entra ID or a central secret manager such as Azure Key Vault.
+- Prefer fine-grained GitHub PATs with minimum permissions and short expiration.
+- For shared deployments, use Microsoft Entra ID or a secret manager such as Azure Key Vault.

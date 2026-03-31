@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCommand } from "../src/command-parser.js";
+import { parseCommand } from "../src/services/interactive-session.js";
 
 describe("parseCommand", () => {
   it("parses 'next'", () => {

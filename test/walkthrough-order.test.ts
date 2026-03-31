@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWalkthroughOrder } from "../src/walkthrough-order.js";
+import { buildWalkthroughOrder } from "../src/services/review-session.js";
 
 describe("buildWalkthroughOrder", () => {
   it("returns an empty array for empty input", () => {

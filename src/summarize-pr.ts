@@ -3,13 +3,14 @@ import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { makeConversationClient } from "./conversation-client.js";
-import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
-import { buildNumberedPatch } from "./diff-line-mapper.js";
-import { buildPrContextBlock, writeProgress } from "./interactive-session.js";
-import { loadPrompt } from "./prompt-loader.js";
-import { renderToTerminal } from "./terminal-renderer.js";
-import type { InteractiveOptions } from "./interactive-session.js";
+import { makeConversationClient } from "./clients/conversation-client.js";
+import { GitHubClient, parsePullRequestUrl } from "./clients/github-client.js";
+import { buildNumberedPatch } from "./utils/diff-line-mapper.js";
+import { buildPrContextBlock } from "./services/review-session.js";
+import { writeProgress } from "./services/interactive-session.js";
+import { loadPrompt } from "./utils/prompt-loader.js";
+import { renderToTerminal } from "./utils/terminal-renderer.js";
+import type { InteractiveOptions } from "./services/interactive-session.js";
 import type { ConversationMessage } from "./types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));

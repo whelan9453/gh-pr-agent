@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ConversationMessage } from "./types.js";
+import type { ConversationMessage } from "../types.js";
 
 function buildPrompt(messages: ConversationMessage[]): string {
   if (messages.length === 1 && messages[0] !== undefined) {

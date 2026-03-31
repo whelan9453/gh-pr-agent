@@ -9,7 +9,7 @@ import {
   writeFileSync
 } from "node:fs";
 import path from "node:path";
-import type { AppSession, SessionArtifacts } from "./types.js";
+import type { AppSession, SessionArtifacts } from "../types.js";
 
 const MAX_SESSION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_SESSION_COUNT = 100;

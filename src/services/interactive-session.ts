@@ -1,21 +1,19 @@
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadPrompt } from "./prompt-loader.js";
-import { renderToTerminal } from "./terminal-renderer.js";
-import { makeConversationClient, type ClientBackend } from "./conversation-client.js";
-import { parseCommand } from "./command-parser.js";
-import { buildAsciiTree } from "./ascii-tree.js";
+import { loadPrompt } from "../utils/prompt-loader.js";
+import { renderToTerminal } from "../utils/terminal-renderer.js";
+import { makeConversationClient, type ClientBackend } from "../clients/conversation-client.js";
 import { loadArtifacts, saveSession } from "./session-store.js";
-import { createSavedSession } from "./review-session.js";
+import { buildPrContextBlock, createSavedSession } from "./review-session.js";
 import type {
   AppSession,
   SessionArtifacts,
   PrContext,
   WalkthroughCursor,
   ConversationMessage
-} from "./types.js";
-import type { ModelPreset } from "./types.js";
+} from "../types.js";
+import type { ModelPreset } from "../types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +37,78 @@ export interface InteractiveOptions {
   verbose?: boolean;
 }
 
+// ── Command parsing ────────────────────────────────────────────────────────
+
+type ParsedCommand =
+  | { type: "next" }
+  | { type: "jump"; filePath: string }
+  | { type: "status" }
+  | { type: "exit" }
+  | { type: "followup"; text: string };
+
+const NEXT_RE = /^(next|下一個|continue|ok)$/i;
+const JUMP_RE = /^jump\s+(.+)$/i;
+const STATUS_RE = /^status$/i;
+const EXIT_RE = /^(exit|quit|q)$/i;
+
+export function parseCommand(input: string): ParsedCommand {
+  const trimmed = input.trim();
+  if (!trimmed) return { type: "followup", text: "" };
+
+  if (NEXT_RE.test(trimmed)) return { type: "next" };
+
+  const jumpMatch = JUMP_RE.exec(trimmed);
+  if (jumpMatch) return { type: "jump", filePath: (jumpMatch[1] ?? "").trim() };
+
+  if (STATUS_RE.test(trimmed)) return { type: "status" };
+  if (EXIT_RE.test(trimmed)) return { type: "exit" };
+
+  return { type: "followup", text: trimmed };
+}
+
+// ── ASCII tree ─────────────────────────────────────────────────────────────
+
+type DirNode = { [key: string]: DirNode | null };
+
+function insertPath(root: DirNode, parts: string[]): void {
+  if (parts.length === 0) return;
+  const [head, ...rest] = parts;
+  if (!head) return;
+  if (rest.length === 0) {
+    root[head] = null;
+  } else {
+    if (!(head in root) || root[head] === null) {
+      root[head] = {};
+    }
+    insertPath(root[head] as DirNode, rest);
+  }
+}
+
+function renderNode(node: DirNode, prefix: string): string[] {
+  const entries = Object.entries(node);
+  const lines: string[] = [];
+  for (const [i, [name, child]] of entries.entries()) {
+    const isLast = i === entries.length - 1;
+    const branch = isLast ? "└── " : "├── ";
+    const childPrefix = isLast ? "    " : "│   ";
+    if (child === null) {
+      lines.push(`${prefix}${branch}${name}`);
+    } else {
+      lines.push(`${prefix}${branch}${name}/`);
+      lines.push(...renderNode(child, prefix + childPrefix));
+    }
+  }
+  return lines;
+}
+
+function buildAsciiTree(filePaths: string[]): string {
+  const root: DirNode = {};
+  for (const p of filePaths) {
+    insertPath(root, p.split("/"));
+  }
+  return renderNode(root, "").join("\n");
+}
+
 // ── Session creation ───────────────────────────────────────────────────────
 
 export async function createWalkthroughSession(
@@ -57,7 +127,7 @@ export async function createWalkthroughSession(
 
 
 function resolvePromptPath(name: string): string {
-  return join(MODULE_DIR, "..", "prompts", name);
+  return join(MODULE_DIR, "..", "..", "prompts", name);
 }
 
 // ── Cursor helpers ─────────────────────────────────────────────────────────
@@ -73,60 +143,6 @@ function jumpWalkthroughCursor(cursor: WalkthroughCursor, filePath: string): Wal
   );
   if (index < 0) return cursor;
   return { ...cursor, fileIndex: index };
-}
-
-// ── PR context block ───────────────────────────────────────────────────────
-
-export function buildPrContextBlock(prContext: PrContext): string {
-  const parts: string[] = [];
-
-  if (prContext.description.trim()) {
-    parts.push("PR Description:", prContext.description.trim());
-  }
-
-  const substantiveReviews = prContext.reviews.filter(
-    (r) => r.state !== "COMMENTED" || r.body.trim()
-  );
-  if (substantiveReviews.length > 0) {
-    parts.push("", "Reviews:");
-    for (const r of substantiveReviews) {
-      const body = r.body.trim() ? ` — "${r.body.trim()}"` : "";
-      parts.push(`  @${r.author}: ${r.state}${body}`);
-    }
-  }
-
-  if (prContext.reviewComments.length > 0) {
-    // Group into threads: root comments + their replies
-    const roots = prContext.reviewComments.filter((c) => c.replyToId === null);
-    const repliesByParent = new Map<number, typeof roots>();
-    for (const c of prContext.reviewComments) {
-      if (c.replyToId !== null) {
-        const list = repliesByParent.get(c.replyToId) ?? [];
-        list.push(c);
-        repliesByParent.set(c.replyToId, list);
-      }
-    }
-    parts.push("", "Open Review Threads (already tracked — do NOT duplicate in findings):");
-    for (const root of roots) {
-      const loc = root.line ? `:${root.line}` : "";
-      parts.push(`  Thread on ${root.path}${loc}:`);
-      parts.push(`    @${root.author}: "${root.body.trim()}"`);
-      for (const reply of repliesByParent.get(root.id) ?? []) {
-        parts.push(`      @${reply.author} (reply): "${reply.body.trim()}"`);
-      }
-    }
-  }
-
-  if (prContext.issueComments.length > 0) {
-    parts.push("", "Discussion:");
-    for (const c of prContext.issueComments) {
-      parts.push(`  @${c.author}: ${c.body.trim()}`);
-    }
-  }
-
-  if (parts.length === 0) return "";
-
-  return ["## PR Discussion", "", ...parts].join("\n");
 }
 
 // ── Context builders ───────────────────────────────────────────────────────

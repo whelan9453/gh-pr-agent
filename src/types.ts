@@ -1,4 +1,4 @@
-import type { ClientBackend } from "./conversation-client.js";
+import type { ClientBackend } from "./clients/conversation-client.js";
 
 export type ModelPreset = "sonnet" | "haiku";
 export type ReviewCommentSide = "LEFT" | "RIGHT";

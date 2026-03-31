@@ -11,9 +11,9 @@ loadDotenv({ path: join(process.cwd(), ".env") });
 
 import { createServer } from "node:http";
 import express from "express";
-import { buildClaudeCliConfig, resolveConfig } from "./config.js";
+import { buildClaudeCliConfig, resolveConfig } from "../config.js";
 import { createDefaultUiServerService, registerApiRoutes } from "./ui-server.js";
-import type { AppConfig, ModelPreset } from "./types.js";
+import type { AppConfig, ModelPreset } from "../types.js";
 
 const PORT = 3001;
 const githubToken = process.env.GITHUB_TOKEN?.trim();

@@ -8,7 +8,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { saveArtifacts, saveSession } from "../src/session-store.js";
+import { saveArtifacts, saveSession } from "../src/services/session-store.js";
 import type { AppSession, PullRequestRef, SessionArtifacts } from "../src/types.js";
 
 const ORIGINAL_CWD = process.cwd();

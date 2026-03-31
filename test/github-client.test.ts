@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { GitHubClient, parsePullRequestUrl } from "../src/github-client.js";
+import { GitHubClient, parsePullRequestUrl } from "../src/clients/github-client.js";
 
 describe("parsePullRequestUrl", () => {
   it("parses github.com URLs", () => {

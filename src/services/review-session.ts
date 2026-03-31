@@ -1,11 +1,9 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildWalkthroughOrder } from "./walkthrough-order.js";
-import { buildNumberedPatch } from "./diff-line-mapper.js";
-import { GitHubClient, parsePullRequestUrl } from "./github-client.js";
-import { loadPrompt } from "./prompt-loader.js";
-import { buildPrContextBlock } from "./interactive-session.js";
-import type { ConversationClient } from "./conversation-client.js";
+import { buildNumberedPatch } from "../utils/diff-line-mapper.js";
+import { GitHubClient, parsePullRequestUrl } from "../clients/github-client.js";
+import { loadPrompt } from "../utils/prompt-loader.js";
+import type { ConversationClient } from "../clients/conversation-client.js";
 import {
   generateSessionId,
   loadArtifacts,
@@ -28,10 +26,99 @@ import type {
   ReviewSubmissionPayload,
   SessionArtifacts,
   WalkthroughCursor
-} from "./types.js";
+} from "../types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const TOTAL_PATCH_BUDGET = 100_000;
+
+// ── Walkthrough ordering ───────────────────────────────────────────────────
+
+type Category = { label: string; re: RegExp };
+
+const CATEGORIES: Category[] = [
+  { label: "types/schema/constants", re: /\/(types?|schemas?|constants?|interfaces?|models?)(\/|\.)|types?\.(ts|js)$|schemas?\.(ts|js)$/i },
+  { label: "domain/service/utils",   re: /\/(services?|domain|utils?|helpers?|lib)\//i },
+  { label: "state/hooks/controllers",re: /\/(hooks?|store|state|contexts?|controllers?|reducers?|actions?)\//i },
+  { label: "ui/pages/components",    re: /\/(pages?|components?|views?|screens?|ui)\//i },
+  { label: "tests",                  re: /\.(test|spec)\.(ts|tsx|js|jsx)$|\/__(tests?|mocks?)__\//i },
+  {
+    label: "config/tooling",
+    re: /(\/config\/|\/configs?\/|\/scripts?\/|^(vite|tsconfig|jest|eslint|rollup|webpack|babel|\.github)|Dockerfile[^/]*$|docker-compose|\.dockerignore$|azure-pipelines|\.ya?ml$|\.github\/|CHANGELOG|LICENSE)/i
+  }
+];
+
+function getCategory(filePath: string): number {
+  for (const [i, { re }] of CATEGORIES.entries()) {
+    if (re.test(filePath)) return i;
+  }
+  return CATEGORIES.length;
+}
+
+export function buildWalkthroughOrder(filePaths: string[]): string[] {
+  const originalIndex = new Map(filePaths.map((p, i) => [p, i]));
+  return [...filePaths].sort((a, b) => {
+    const ca = getCategory(a);
+    const cb = getCategory(b);
+    if (ca !== cb) return ca - cb;
+    return (originalIndex.get(a) ?? 0) - (originalIndex.get(b) ?? 0);
+  });
+}
+
+// ── PR context formatting ──────────────────────────────────────────────────
+
+export function buildPrContextBlock(prContext: PrContext): string {
+  const parts: string[] = [];
+
+  if (prContext.description.trim()) {
+    parts.push("PR Description:", prContext.description.trim());
+  }
+
+  const substantiveReviews = prContext.reviews.filter(
+    (r) => r.state !== "COMMENTED" || r.body.trim()
+  );
+  if (substantiveReviews.length > 0) {
+    parts.push("", "Reviews:");
+    for (const r of substantiveReviews) {
+      const body = r.body.trim() ? ` — "${r.body.trim()}"` : "";
+      parts.push(`  @${r.author}: ${r.state}${body}`);
+    }
+  }
+
+  if (prContext.reviewComments.length > 0) {
+    // Group into threads: root comments + their replies
+    const roots = prContext.reviewComments.filter((c) => c.replyToId === null);
+    const repliesByParent = new Map<number, typeof roots>();
+    for (const c of prContext.reviewComments) {
+      if (c.replyToId !== null) {
+        const list = repliesByParent.get(c.replyToId) ?? [];
+        list.push(c);
+        repliesByParent.set(c.replyToId, list);
+      }
+    }
+    parts.push("", "Open Review Threads (already tracked — do NOT duplicate in findings):");
+    for (const root of roots) {
+      const loc = root.line ? `:${root.line}` : "";
+      parts.push(`  Thread on ${root.path}${loc}:`);
+      parts.push(`    @${root.author}: "${root.body.trim()}"`);
+      for (const reply of repliesByParent.get(root.id) ?? []) {
+        parts.push(`      @${reply.author} (reply): "${reply.body.trim()}"`);
+      }
+    }
+  }
+
+  if (prContext.issueComments.length > 0) {
+    parts.push("", "Discussion:");
+    for (const c of prContext.issueComments) {
+      parts.push(`  @${c.author}: ${c.body.trim()}`);
+    }
+  }
+
+  if (parts.length === 0) return "";
+
+  return ["## PR Discussion", "", ...parts].join("\n");
+}
+
+// ── Interfaces ─────────────────────────────────────────────────────────────
 
 export interface DraftCommentInput {
   id?: string;
@@ -309,7 +396,7 @@ export async function runAiReview(
   const artifacts = loadArtifacts(sessionId);
 
   onProgress?.("載入分析提示詞...");
-  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
+  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-summary.md"));
 
   const fileCount = artifacts.files.length;
   const totalChanges = artifacts.files.reduce((s, f) => s + f.additions + f.deletions, 0);
@@ -358,7 +445,7 @@ export async function sendChatMessage(
   client: ConversationClient
 ): Promise<{ reply: string }> {
   const artifacts = loadArtifacts(sessionId);
-  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
+  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-summary.md"));
 
   const history: ConversationMessage[] = artifacts.chatHistory ?? [];
   const messages: ConversationMessage[] = [...history, { role: "user", content: message }];

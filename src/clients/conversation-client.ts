@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { ConversationMessage } from "./types.js";
+import type { ConversationMessage } from "../types.js";
 import { ClaudeCliClient } from "./claude-cli-client.js";
 import { CodexCliClient } from "./codex-cli-client.js";
 

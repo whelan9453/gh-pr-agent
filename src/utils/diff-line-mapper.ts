@@ -1,4 +1,4 @@
-import type { DiffRow } from "./types.js";
+import type { DiffRow } from "../types.js";
 
 const HUNK_RE = /^@@ -(?<old>\d+)(?:,\d+)? \+(?<new>\d+)(?:,\d+)? @@/;
 

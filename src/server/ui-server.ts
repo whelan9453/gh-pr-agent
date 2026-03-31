@@ -17,10 +17,10 @@ import {
   upsertDraftComment,
   type DraftCommentInput,
   type SessionOverview
-} from "./review-session.js";
-import { loadArtifacts } from "./session-store.js";
-import { makeConversationClient, type ClientBackend } from "./conversation-client.js";
-import type { AppConfig, DraftComment, FileMaterial, ModelPreset, ReviewSubmissionPayload } from "./types.js";
+} from "../services/review-session.js";
+import { loadArtifacts } from "../services/session-store.js";
+import { makeConversationClient, type ClientBackend } from "../clients/conversation-client.js";
+import type { AppConfig, DraftComment, FileMaterial, ModelPreset, ReviewSubmissionPayload } from "../types.js";
 
 export interface BackendSettings {
   backend: ClientBackend;
@@ -334,16 +334,16 @@ export async function startUiServer(options: StartUiServerOptions): Promise<stri
 
 function resolveUiBuildDir(): string {
   const candidates = [
-    join(MODULE_DIR, "..", "ui"),
-    join(MODULE_DIR, "..", "dist", "ui"),
-    join(MODULE_DIR, "..", "..", "dist", "ui")
+    join(MODULE_DIR, "..", "..", "ui"),
+    join(MODULE_DIR, "..", "..", "dist", "ui"),
+    join(MODULE_DIR, "..", "..", "..", "dist", "ui")
   ];
   for (const candidate of candidates) {
     if (existsSync(join(candidate, "index.html")) && existsSync(join(candidate, "assets"))) {
       return candidate;
     }
   }
-  return candidates[0] ?? join(MODULE_DIR, "..", "dist", "ui");
+  return candidates[0] ?? join(MODULE_DIR, "..", "..", "dist", "ui");
 }
 
 function listen(app: Express): Promise<number> {

@@ -9,7 +9,7 @@ import {
   PrReview,
   PrReviewComment,
   ReviewCommentSide
-} from "./types.js";
+} from "../types.js";
 
 const PR_URL_RE =
   /^https:\/\/(?<host>[^/]+)\/(?<owner>[^/]+)\/(?<repo>[^/]+)\/pull\/(?<number>\d+)(?:\/.*)?$/;
