@@ -1,12 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ConversationMessage } from "./types.js";
 import { ClaudeCliClient } from "./claude-cli-client.js";
+import { CodexCliClient } from "./codex-cli-client.js";
 
 export interface ConversationClient {
   send(system: string, messages: ConversationMessage[], maxTokens?: number, signal?: AbortSignal): Promise<string>;
 }
 
-export type ClientBackend = "foundry" | "claude-cli";
+export type ClientBackend = "foundry" | "claude-cli" | "codex-cli";
 
 export function makeConversationClient(opts: {
   backend?: ClientBackend;
@@ -14,6 +15,7 @@ export function makeConversationClient(opts: {
   azureFoundryApiKey?: string;
   deploymentName?: string;
   claudeCliModel?: string;
+  codexCliModel?: string;
 }): ConversationClient {
   if (opts.backend === "foundry") {
     return new FoundryConversationClient(
@@ -21,6 +23,9 @@ export function makeConversationClient(opts: {
       opts.azureFoundryApiKey!,
       opts.deploymentName!
     );
+  }
+  if (opts.backend === "codex-cli") {
+    return new CodexCliClient(opts.codexCliModel);
   }
   return new ClaudeCliClient(opts.claudeCliModel);
 }

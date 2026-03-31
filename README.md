@@ -1,10 +1,11 @@
 # gh-pr-agent
 
-`gh-pr-agent` is a local CLI for reviewing GitHub pull requests with Claude on Azure Foundry.
+`gh-pr-agent` is a local CLI for reviewing GitHub pull requests with Claude, Codex CLI, or Azure Foundry.
 
 ## Features
 
 - Review private GitHub PRs with GitHub PATs
+- Use local Claude CLI or Codex CLI from the AI Review panel, with Codex CLI as the default
 - Use Azure Foundry Claude deployments
 - Generate per-file change highlights and possible issues with line numbers
 - Save structured JSON output for future GitHub comment automation

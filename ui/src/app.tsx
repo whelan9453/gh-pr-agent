@@ -101,7 +101,11 @@ export default function App(): JSX.Element {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [runningAiReview, setRunningAiReview] = useState(false);
   const [aiReviewStatus, setAiReviewStatus] = useState("");
-  const [backendSettings, setBackendSettings] = useState<BackendSettings>({ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6" });
+  const [backendSettings, setBackendSettings] = useState<BackendSettings>({
+    backend: "codex-cli",
+    claudeCliModel: "claude-sonnet-4-6",
+    codexCliModel: ""
+  });
   const [sendingChat, setSendingChat] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -275,7 +279,7 @@ export default function App(): JSX.Element {
   }
 
   function handleBackendSettingsChange(partial: Partial<BackendSettings>): void {
-    if ("claudeCliModel" in partial) {
+    if ("claudeCliModel" in partial || "codexCliModel" in partial) {
       setBackendSettings((prev) => ({ ...prev, ...partial }));
       if (pendingModelUpdate.current !== null) clearTimeout(pendingModelUpdate.current);
       pendingModelUpdate.current = setTimeout(() => {
@@ -898,10 +902,11 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             <select
               value={props.backendSettings.backend}
               disabled={props.runningAiReview}
-              onChange={(e) => props.onBackendSettingsChange({ backend: e.target.value as "claude-cli" | "foundry" })}
+              onChange={(e) => props.onBackendSettingsChange({ backend: e.target.value as "claude-cli" | "codex-cli" | "foundry" })}
               style={{ fontSize: "0.75rem", padding: "2px 4px" }}
             >
               <option value="claude-cli">Claude CLI</option>
+              <option value="codex-cli">Codex CLI</option>
               <option value="foundry">Azure Foundry</option>
             </select>
             {props.backendSettings.backend === "claude-cli" && (
@@ -910,6 +915,16 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                 value={props.backendSettings.claudeCliModel}
                 disabled={props.runningAiReview}
                 onChange={(e) => props.onBackendSettingsChange({ claudeCliModel: e.target.value })}
+                style={{ fontSize: "0.75rem", padding: "2px 4px", width: "160px" }}
+              />
+            )}
+            {props.backendSettings.backend === "codex-cli" && (
+              <input
+                type="text"
+                value={props.backendSettings.codexCliModel}
+                placeholder="default model"
+                disabled={props.runningAiReview}
+                onChange={(e) => props.onBackendSettingsChange({ codexCliModel: e.target.value })}
                 style={{ fontSize: "0.75rem", padding: "2px 4px", width: "160px" }}
               />
             )}

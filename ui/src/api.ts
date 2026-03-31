@@ -163,8 +163,9 @@ export function sendChatMessage(
 }
 
 export type BackendSettings = {
-  backend: "claude-cli" | "foundry";
+  backend: "claude-cli" | "codex-cli" | "foundry";
   claudeCliModel: string;
+  codexCliModel: string;
 };
 
 export function getSettings(): Promise<BackendSettings> {

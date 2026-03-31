@@ -47,6 +47,7 @@ export interface AppConfig {
   deploymentName: string;
   backend?: ClientBackend;
   claudeCliModel?: string;
+  codexCliModel?: string;
 }
 
 // ── Interactive session types ─────────────────────────────────────────────

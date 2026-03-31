@@ -25,6 +25,7 @@ import type { AppConfig, DraftComment, FileMaterial, ModelPreset, ReviewSubmissi
 export interface BackendSettings {
   backend: ClientBackend;
   claudeCliModel: string;
+  codexCliModel: string;
 }
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
@@ -87,10 +88,17 @@ export interface StartUiServerOptions {
   initialPrUrl?: string;
 }
 
+function getBackendLabel(backend: ClientBackend): string {
+  if (backend === "codex-cli") return "Codex CLI";
+  if (backend === "claude-cli") return "Claude CLI";
+  return "Azure Foundry";
+}
+
 export function createDefaultUiServerService(config: AppConfig): UiServerService {
   let settings: BackendSettings = {
-    backend: config.backend ?? "claude-cli",
+    backend: config.backend ?? "codex-cli",
     claudeCliModel: config.claudeCliModel ?? "claude-sonnet-4-6",
+    codexCliModel: config.codexCliModel ?? "",
   };
 
   let cachedClient = makeConversationClient({
@@ -99,6 +107,7 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
     azureFoundryApiKey: config.azureFoundryApiKey,
     deploymentName: config.deploymentName,
     claudeCliModel: settings.claudeCliModel,
+    codexCliModel: settings.codexCliModel,
   });
 
   const getClient = () => cachedClient;
@@ -122,7 +131,7 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
       return { url: result.url, drafts: result.artifacts.drafts };
     },
     async runAiReview(sessionId, onProgress, signal) {
-      return runAiReview(sessionId, getClient(), onProgress, signal);
+      return runAiReview(sessionId, getClient(), onProgress, signal, getBackendLabel(settings.backend));
     },
     async sendAnnotationChat(sessionId, context, body, path, thread, message) {
       return sendAnnotationChatMessage(sessionId, context, body, path, thread, message, getClient());
@@ -141,14 +150,16 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
         azureFoundryApiKey: config.azureFoundryApiKey,
         deploymentName: config.deploymentName,
         claudeCliModel: settings.claudeCliModel,
+        codexCliModel: settings.codexCliModel,
       });
     },
   };
 }
 
 const settingsUpdateSchema = z.object({
-  backend: z.enum(["claude-cli", "foundry"]).optional(),
+  backend: z.enum(["claude-cli", "codex-cli", "foundry"]).optional(),
   claudeCliModel: z.string().min(1).optional(),
+  codexCliModel: z.string().optional(),
 });
 
 export function registerApiRoutes(app: Express, service: UiServerService): void {
@@ -162,6 +173,7 @@ export function registerApiRoutes(app: Express, service: UiServerService): void 
       const payload: Partial<BackendSettings> = {};
       if (raw.backend !== undefined) payload.backend = raw.backend;
       if (raw.claudeCliModel !== undefined) payload.claudeCliModel = raw.claudeCliModel;
+      if (raw.codexCliModel !== undefined) payload.codexCliModel = raw.codexCliModel;
       service.updateSettings(payload);
       res.json(service.getSettings());
     } catch (error) {

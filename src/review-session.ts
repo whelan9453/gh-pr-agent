@@ -301,7 +301,8 @@ export async function runAiReview(
   sessionId: string,
   client: ConversationClient,
   onProgress?: (message: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  backendLabel = "AI"
 ): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> }> {
   onProgress?.("載入 PR 資料...");
   const session = loadSession(sessionId);
@@ -316,8 +317,16 @@ export async function runAiReview(
   const userMessage = buildAiReviewMessage(session, artifacts);
   const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
 
-  onProgress?.("傳送至 Claude，等待回應...");
-  const raw = await client.send(systemPrompt, messages, 8192, signal);
+  onProgress?.(`傳送至 ${backendLabel}，等待回應...`);
+  const startedAt = Date.now();
+  const heartbeat = setInterval(() => {
+    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    onProgress?.(`${backendLabel} 仍在執行，已等待 ${formatElapsed(elapsedSeconds)}...`);
+  }, 15_000);
+  const raw = await client.send(systemPrompt, messages, 8192, signal)
+    .finally(() => {
+      clearInterval(heartbeat);
+    });
 
   onProgress?.("解析分析結果...");
   const { analysis, comments } = parseAiComments(raw);
@@ -332,6 +341,15 @@ export async function runAiReview(
   saveArtifacts(sessionId, updated);
 
   return { analysis, draftCount: 0, comments };
+}
+
+function formatElapsed(totalSeconds: number): string {
+  if (totalSeconds < 60) {
+    return `${totalSeconds} 秒`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds === 0 ? `${minutes} 分鐘` : `${minutes} 分 ${seconds} 秒`;
 }
 
 export async function sendChatMessage(
