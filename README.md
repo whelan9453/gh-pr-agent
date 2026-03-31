@@ -76,6 +76,9 @@ Set in `.env` (auto-loaded at startup):
 | `AZURE_FOUNDRY_API_KEY` | Azure Foundry backend only |
 | `AZURE_FOUNDRY_HAIKU_DEPLOYMENT` | Azure Foundry + haiku model |
 | `AZURE_FOUNDRY_SONNET_DEPLOYMENT` | Azure Foundry + sonnet model |
+| `TOTAL_PATCH_BUDGET` | Optional. Max diff characters sent to AI for PR-wide review/summary prompts. Default: `200000` |
+
+`TOTAL_PATCH_BUDGET` is a character budget, not a token budget. Raising it can reduce prompt truncation on large PRs, but increases prompt size, latency, and model cost.
 
 ## Development
 

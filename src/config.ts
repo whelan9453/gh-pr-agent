@@ -1,5 +1,7 @@
 import type { AppConfig, ModelPreset } from "./types.js";
 
+const DEFAULT_TOTAL_PATCH_BUDGET = 200_000;
+
 export function buildClaudeCliConfig(
   githubToken: string,
   model: ModelPreset,
@@ -29,6 +31,18 @@ function readRequiredEnv(name: string): string {
   return value;
 }
 
+function readOptionalPositiveIntEnv(name: string): number | null {
+  const raw = process.env[name]?.trim();
+  if (!raw) {
+    return null;
+  }
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return value;
+}
+
 function resolveDeploymentName(model: ModelPreset): string {
   const envName =
     model === "sonnet" ? "AZURE_FOUNDRY_SONNET_DEPLOYMENT" : "AZURE_FOUNDRY_HAIKU_DEPLOYMENT";
@@ -48,4 +62,8 @@ export function resolveConfig(options: ResolveConfigOptions): AppConfig {
     selectedModel: options.model,
     deploymentName: resolveDeploymentName(options.model)
   };
+}
+
+export function getTotalPatchBudget(): number {
+  return readOptionalPositiveIntEnv("TOTAL_PATCH_BUDGET") ?? DEFAULT_TOTAL_PATCH_BUDGET;
 }

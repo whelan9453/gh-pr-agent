@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildNumberedPatch } from "../utils/diff-line-mapper.js";
 import { GitHubClient, parsePullRequestUrl } from "../clients/github-client.js";
+import { getTotalPatchBudget } from "../config.js";
 import { loadPrompt } from "../utils/prompt-loader.js";
 import type { ConversationClient } from "../clients/conversation-client.js";
 import {
@@ -29,8 +30,6 @@ import type {
 } from "../types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const TOTAL_PATCH_BUDGET = 100_000;
-
 // ── Walkthrough ordering ───────────────────────────────────────────────────
 
 type Category = { label: string; re: RegExp };
@@ -459,14 +458,15 @@ export async function sendChatMessage(
 
 function buildAiReviewMessage(session: AppSession, artifacts: SessionArtifacts): string {
   const { prInfo, prContext, files } = artifacts;
+  const totalPatchBudget = getTotalPatchBudget();
   const totalPatchChars = files.reduce((sum, f) => sum + (f.numberedPatch?.length ?? 0), 0);
 
   const fileBlocks = files.map((f) => {
     const parts = [`### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`];
     if (f.numberedPatch) {
       let patch = f.numberedPatch;
-      if (totalPatchChars > TOTAL_PATCH_BUDGET) {
-        const budget = Math.floor((patch.length / totalPatchChars) * TOTAL_PATCH_BUDGET);
+      if (totalPatchChars > totalPatchBudget) {
+        const budget = Math.floor((patch.length / totalPatchChars) * totalPatchBudget);
         if (patch.length > budget) patch = patch.slice(0, budget) + "\n... (truncated)";
       }
       parts.push("```diff", patch, "```");

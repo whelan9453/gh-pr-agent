@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveConfig } from "../src/config.js";
+import { getTotalPatchBudget, resolveConfig } from "../src/config.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -32,5 +32,21 @@ describe("resolveConfig", () => {
         azureFoundryApiKey: "az"
       })
     ).toThrow("AZURE_FOUNDRY_HAIKU_DEPLOYMENT");
+  });
+
+  it("defaults total patch budget to 200000", () => {
+    expect(getTotalPatchBudget()).toBe(200_000);
+  });
+
+  it("reads total patch budget from env", () => {
+    process.env.TOTAL_PATCH_BUDGET = "240000";
+
+    expect(getTotalPatchBudget()).toBe(240_000);
+  });
+
+  it("rejects invalid total patch budget values", () => {
+    process.env.TOTAL_PATCH_BUDGET = "0";
+
+    expect(() => getTotalPatchBudget()).toThrow("TOTAL_PATCH_BUDGET must be a positive integer");
   });
 });

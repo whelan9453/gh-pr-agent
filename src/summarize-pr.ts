@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { makeConversationClient } from "./clients/conversation-client.js";
 import { GitHubClient, parsePullRequestUrl } from "./clients/github-client.js";
+import { getTotalPatchBudget } from "./config.js";
 import { buildNumberedPatch } from "./utils/diff-line-mapper.js";
 import { buildPrContextBlock } from "./services/review-session.js";
 import { writeProgress } from "./services/interactive-session.js";
@@ -14,8 +15,6 @@ import type { InteractiveOptions } from "./services/interactive-session.js";
 import type { ConversationMessage } from "./types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-
-const TOTAL_PATCH_BUDGET = 100_000;
 
 interface SummaryComment {
   context: string;
@@ -110,6 +109,7 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     return { numberedPatch, validNewLines };
   });
   const validLinesByPath = new Map(changedFiles.map((f, i) => [f.path, patchData[i]?.validNewLines ?? new Set<number>()]));
+  const totalPatchBudget = getTotalPatchBudget();
   const totalPatchChars = patchData.reduce((sum, p) => sum + (p?.numberedPatch?.length ?? 0), 0);
 
   const fileBlocks = changedFiles.map((f, i) => {
@@ -117,8 +117,8 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     const patch = patchData[i]?.numberedPatch ?? null;
     if (patch) {
       let displayed = patch;
-      if (totalPatchChars > TOTAL_PATCH_BUDGET) {
-        const budget = Math.floor((patch.length / totalPatchChars) * TOTAL_PATCH_BUDGET);
+      if (totalPatchChars > totalPatchBudget) {
+        const budget = Math.floor((patch.length / totalPatchChars) * totalPatchBudget);
         if (patch.length > budget) {
           displayed = patch.slice(0, budget) + "\n... (truncated)";
         }
