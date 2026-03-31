@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ReviewWorkspace } from "./app";
-import type { FileResponse, SessionOverviewResponse } from "./types";
+import type { AiReviewAnnotation, FileResponse, SessionOverviewResponse } from "./types";
 
 function makeSession(): SessionOverviewResponse {
   return {
@@ -116,6 +116,17 @@ function makeFileResponse(): FileResponse {
   };
 }
 
+function makeAnnotation(): AiReviewAnnotation {
+  return {
+    context: "Leave allocation API validation",
+    severity: "must-fix",
+    description: "`type` 未受限於合法假別，無效值目前會走到 KeyError 並回傳 500。",
+    body: "建議在 schema 層就限制 `type` 只能是合法 leave type。",
+    path: "src/app.ts",
+    line: 10
+  };
+}
+
 describe("ReviewWorkspace", () => {
   it("creates a draft from a selected diff range", async () => {
     const user = userEvent.setup();
@@ -161,5 +172,67 @@ describe("ReviewWorkspace", () => {
       startRowKey: "h0-r0",
       endRowKey: "h0-r0"
     });
+  });
+
+  it("shows annotation chat messages immediately after send", async () => {
+    const user = userEvent.setup();
+    Element.prototype.scrollIntoView = vi.fn();
+    let resolveReply!: (value: string) => void;
+    const onSendAnnotationMessage = vi.fn().mockImplementation(() =>
+      new Promise<string>((resolve) => {
+        resolveReply = resolve;
+      })
+    );
+
+    render(
+      <ReviewWorkspace
+        session={{
+          ...makeSession(),
+          chatMessages: [{ role: "assistant", content: "Review result", annotations: [makeAnnotation()] }]
+        }}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[{ role: "assistant", content: "Review result", annotations: [makeAnnotation()] }]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={onSendAnnotationMessage}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "▼ 討論 / 新增留言" }));
+    const annotationChatForm = screen.getByPlaceholderText("針對這個問題提問...").closest("form");
+    if (!annotationChatForm) {
+      throw new Error("Annotation chat form not found");
+    }
+    await user.type(within(annotationChatForm).getByPlaceholderText("針對這個問題提問..."), "上次給的意見都修正了嗎");
+    await user.click(within(annotationChatForm).getByRole("button", { name: "傳送" }));
+
+    expect(screen.getByText("上次給的意見都修正了嗎")).toBeTruthy();
+    expect(onSendAnnotationMessage).toHaveBeenCalledWith(
+      "Leave allocation API validation",
+      "建議在 schema 層就限制 `type` 只能是合法 leave type。",
+      "src/app.ts",
+      [],
+      "上次給的意見都修正了嗎"
+    );
+
+    resolveReply("看起來大致修正了，但還要補 enum 驗證。");
+    expect(await screen.findByText("看起來大致修正了，但還要補 enum 驗證。")).toBeTruthy();
   });
 });

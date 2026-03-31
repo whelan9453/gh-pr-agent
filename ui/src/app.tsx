@@ -484,12 +484,16 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
       });
     },
     async onSendMessage(key, annotation, thread, message) {
-      patchAnnotation(key, annotation.body, { sending: true });
+      const nextThread: Array<{ role: "user" | "assistant"; content: string }> = [
+        ...thread,
+        { role: "user", content: message }
+      ];
+      patchAnnotation(key, annotation.body, { sending: true, thread: nextThread });
       try {
         const reply = await props.onSendAnnotationMessage(annotation.context, annotation.body, annotation.path, thread, message);
         patchAnnotation(key, annotation.body, {
           sending: false,
-          thread: [...thread, { role: "user", content: message }, { role: "assistant", content: reply }]
+          thread: [...nextThread, { role: "assistant", content: reply }]
         });
       } catch {
         patchAnnotation(key, annotation.body, { sending: false });
