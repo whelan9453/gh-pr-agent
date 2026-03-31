@@ -272,16 +272,68 @@ describe("ReviewWorkspace", () => {
     );
 
     const textarea = screen.getByPlaceholderText("問關於這個 PR 的問題...") as HTMLTextAreaElement;
+    const sendButton = screen.getByRole("button", { name: "傳送" }) as HTMLButtonElement;
     fireEvent.change(textarea, { target: { value: "為什麼這次的must fix你上次不一起講" } });
 
     fireEvent.compositionStart(textarea);
+    expect(sendButton.disabled).toBe(true);
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 229, which: 229, isComposing: true });
     expect(onSendChatMessage).not.toHaveBeenCalled();
     expect(textarea.value).toBe("為什麼這次的must fix你上次不一起講");
 
     fireEvent.compositionEnd(textarea);
+    expect(sendButton.disabled).toBe(false);
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 13, which: 13 });
     expect(onSendChatMessage).toHaveBeenCalledWith("為什麼這次的must fix你上次不一起講");
+    expect(textarea.value).toBe("");
+  });
+
+  it("does not submit the main chat when clicking send during IME composition", async () => {
+    const user = userEvent.setup();
+    const onSendChatMessage = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ReviewWorkspace
+        session={makeSession()}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={onSendChatMessage}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText("問關於這個 PR 的問題...") as HTMLTextAreaElement;
+    const sendButton = screen.getByRole("button", { name: "傳送" }) as HTMLButtonElement;
+    fireEvent.change(textarea, { target: { value: "你上次不一起講" } });
+    fireEvent.compositionStart(textarea);
+
+    expect(sendButton.disabled).toBe(true);
+    await user.click(sendButton);
+    expect(onSendChatMessage).not.toHaveBeenCalled();
+    expect(textarea.value).toBe("你上次不一起講");
+
+    fireEvent.compositionEnd(textarea);
+    expect(sendButton.disabled).toBe(false);
+    await user.click(sendButton);
+    expect(onSendChatMessage).toHaveBeenCalledWith("你上次不一起講");
     expect(textarea.value).toBe("");
   });
 
@@ -322,14 +374,17 @@ describe("ReviewWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: "▼ 討論 / 新增留言" }));
     const textarea = screen.getByPlaceholderText("針對這個問題提問...") as HTMLTextAreaElement;
+    const sendButton = within(textarea.closest("form")!).getByRole("button", { name: "傳送" }) as HTMLButtonElement;
     fireEvent.change(textarea, { target: { value: "你上次不一起講" } });
 
     fireEvent.compositionStart(textarea);
+    expect(sendButton.disabled).toBe(true);
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 229, which: 229, isComposing: true });
     expect(onSendAnnotationMessage).not.toHaveBeenCalled();
     expect(textarea.value).toBe("你上次不一起講");
 
     fireEvent.compositionEnd(textarea);
+    expect(sendButton.disabled).toBe(false);
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter", keyCode: 13, which: 13 });
     expect(onSendAnnotationMessage).toHaveBeenCalledWith(
       "Leave allocation API validation",

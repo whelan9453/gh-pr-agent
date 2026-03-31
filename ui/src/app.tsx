@@ -1062,6 +1062,7 @@ function shouldSubmitTextareaOnEnter(
 
 function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [input, setInput] = useState("");
+  const [isComposing, setIsComposing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
 
@@ -1071,6 +1072,7 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
 
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
+    if (isComposingRef.current || isComposing) return;
     const message = input.trim();
     if (!message || props.sending) return;
     flushSync(() => {
@@ -1116,9 +1118,11 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
           onChange={(e) => setInput(e.target.value)}
           onCompositionStart={() => {
             isComposingRef.current = true;
+            setIsComposing(true);
           }}
           onCompositionEnd={() => {
             isComposingRef.current = false;
+            setIsComposing(false);
           }}
           placeholder="問關於這個 PR 的問題..."
           rows={3}
@@ -1129,7 +1133,7 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
             }
           }}
         />
-        <button type="submit" disabled={!input.trim() || props.sending}>
+        <button type="submit" disabled={!input.trim() || props.sending || isComposing}>
           {props.sending ? "傳送中..." : "傳送"}
         </button>
       </form>
@@ -1151,12 +1155,14 @@ function AnnotationCard({
   const cardKey = `${msgIdx}-${annIdx}`;
   const state = handlers.getState(cardKey, annotation.body);
   const [chatInput, setChatInput] = useState("");
+  const [isComposing, setIsComposing] = useState(false);
   const isComposingRef = useRef(false);
   const hasLocation = annotation.path != null;
   const severityLabel = annotation.severity === "must-fix" ? "必須修正" : "建議改善";
 
   async function handleSendChat(e?: React.FormEvent): Promise<void> {
     e?.preventDefault();
+    if (isComposingRef.current || isComposing) return;
     const msg = chatInput.trim();
     if (!msg || state.sending) return;
     flushSync(() => {
@@ -1215,9 +1221,11 @@ function AnnotationCard({
               onChange={(e) => setChatInput(e.target.value)}
               onCompositionStart={() => {
                 isComposingRef.current = true;
+                setIsComposing(true);
               }}
               onCompositionEnd={() => {
                 isComposingRef.current = false;
+                setIsComposing(false);
               }}
               placeholder="針對這個問題提問..."
               rows={2}
@@ -1229,7 +1237,7 @@ function AnnotationCard({
                 }
               }}
             />
-            <button type="submit" disabled={!chatInput.trim() || state.sending}>
+            <button type="submit" disabled={!chatInput.trim() || state.sending || isComposing}>
               {state.sending ? "傳送中..." : "傳送"}
             </button>
           </form>
