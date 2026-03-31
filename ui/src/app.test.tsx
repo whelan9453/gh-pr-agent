@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReviewWorkspace } from "./app";
-import type { AiReviewAnnotation, FileResponse, SessionOverviewResponse } from "./types";
+import type { AiReviewAnnotation, FileResponse, SessionOverviewResponse } from "./api-types";
 
 afterEach(() => {
   cleanup();

@@ -1,10 +1,5 @@
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildNumberedPatch } from "../utils/diff-line-mapper.js";
 import { GitHubClient, parsePullRequestUrl } from "../clients/github-client.js";
-import { getTotalPatchBudget } from "../config.js";
-import { loadPrompt } from "../utils/prompt-loader.js";
-import type { ConversationClient } from "../clients/conversation-client.js";
 import {
   generateSessionId,
   loadArtifacts,
@@ -15,7 +10,6 @@ import {
 import type {
   AppSession,
   ChangedFile,
-  ConversationMessage,
   DraftComment,
   ExistingInlineComment,
   FileMaterial,
@@ -24,12 +18,10 @@ import type {
   PullRequestInfo,
   PullRequestRef,
   ReviewCommentSide,
-  ReviewSubmissionPayload,
   SessionArtifacts,
   WalkthroughCursor
 } from "../types.js";
 
-const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 // ── Walkthrough ordering ───────────────────────────────────────────────────
 
 type Category = { label: string; re: RegExp };
@@ -292,249 +284,7 @@ export function setReviewSummary(sessionId: string, reviewSummary: string): void
   saveArtifacts(sessionId, artifacts);
 }
 
-export async function submitReview(
-  sessionId: string,
-  githubToken: string,
-  payload: ReviewSubmissionPayload
-): Promise<{ url: string; artifacts: SessionArtifacts }> {
-  const session = loadSession(sessionId);
-  const artifacts = loadArtifacts(sessionId);
-  const github = new GitHubClient(githubToken, session.prRef.apiBaseUrl);
-  const reviewBody = payload.body.trim();
-  const event = payload.event ?? "COMMENT";
-
-  if (event !== "APPROVE" && artifacts.drafts.length === 0 && !reviewBody) {
-    throw new Error("Review submission must include a summary or at least one inline comment.");
-  }
-
-  const url = await github.createReview(
-    session.prRef,
-    artifacts.prInfo.headSha,
-    reviewBody,
-    artifacts.drafts.map((draft) => ({
-      path: draft.path,
-      body: draft.body,
-      line: draft.line,
-      side: draft.side,
-      startLine: draft.startLine,
-      startSide: draft.startSide
-    })),
-    event
-  );
-
-  const [issueComments, reviews, reviewComments] = await Promise.all([
-    github.listIssueComments(session.prRef),
-    github.listReviews(session.prRef),
-    github.listReviewComments(session.prRef)
-  ]);
-
-  const commentsByPath = groupCommentsByPath(reviewComments);
-  artifacts.prContext = {
-    description: artifacts.prInfo.body,
-    issueComments,
-    reviews,
-    reviewComments
-  };
-  artifacts.files = artifacts.files.map((file) => ({
-    ...file,
-    existingComments: commentsByPath.get(file.path) ?? []
-  }));
-  artifacts.drafts = [];
-  artifacts.reviewSummary = "";
-  saveArtifacts(sessionId, artifacts);
-
-  session.updatedAt = new Date().toISOString();
-  saveSession(session);
-
-  return { url, artifacts };
-}
-
-export async function sendAnnotationChatMessage(
-  sessionId: string,
-  annotationContext: string,
-  annotationBody: string,
-  annotationPath: string | null,
-  thread: Array<{ role: "user" | "assistant"; content: string }>,
-  userMessage: string,
-  client: ConversationClient
-): Promise<{ reply: string }> {
-  const artifacts = loadArtifacts(sessionId);
-  let fileContext = "";
-  if (annotationPath) {
-    const file = artifacts.files.find((f) => f.path === annotationPath);
-    if (file?.numberedPatch) {
-      fileContext = `\n\n## File: ${annotationPath}\n\`\`\`diff\n${file.numberedPatch}\n\`\`\``;
-    }
-  }
-  const systemPrompt = [
-    "You are a senior code reviewer answering questions about a specific issue found in a pull request.",
-    "",
-    `Issue: ${annotationContext}`,
-    `Details: ${annotationBody}`,
-    fileContext,
-    "",
-    "Answer concisely and technically. If asked to write a GitHub review comment, write it in English, professional and specific."
-  ].join("\n");
-  const messages: ConversationMessage[] = [
-    ...thread,
-    { role: "user", content: userMessage }
-  ];
-  const reply = await client.send(systemPrompt, messages, 1500);
-  return { reply };
-}
-
-export async function runAiReview(
-  sessionId: string,
-  client: ConversationClient,
-  onProgress?: (message: string) => void,
-  signal?: AbortSignal,
-  backendLabel = "AI"
-): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> }> {
-  onProgress?.("載入 PR 資料...");
-  const session = loadSession(sessionId);
-  const artifacts = loadArtifacts(sessionId);
-
-  onProgress?.("載入分析提示詞...");
-  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-summary.md"));
-
-  const fileCount = artifacts.files.length;
-  const totalChanges = artifacts.files.reduce((s, f) => s + f.additions + f.deletions, 0);
-  onProgress?.(`組合差異內容（${fileCount} 個檔案，${totalChanges} 行變更）...`);
-  const userMessage = buildAiReviewMessage(session, artifacts);
-  const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
-
-  onProgress?.(`傳送至 ${backendLabel}，等待回應...`);
-  const startedAt = Date.now();
-  const heartbeat = setInterval(() => {
-    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
-    onProgress?.(`${backendLabel} 仍在執行，已等待 ${formatElapsed(elapsedSeconds)}...`);
-  }, 15_000);
-  const raw = await client.send(systemPrompt, messages, 8192, signal)
-    .finally(() => {
-      clearInterval(heartbeat);
-    });
-
-  onProgress?.("解析分析結果...");
-  const { analysis, comments } = parseAiComments(raw);
-
-  // Reload artifacts after the (potentially long) LLM call to pick up any concurrent changes
-  // (e.g., drafts added by the user while the model was running) before overwriting chatHistory.
-  const updated = loadArtifacts(sessionId);
-  updated.chatHistory = [
-    { role: "user", content: userMessage },
-    { role: "assistant", content: raw }
-  ];
-  saveArtifacts(sessionId, updated);
-
-  return { analysis, draftCount: 0, comments };
-}
-
-function formatElapsed(totalSeconds: number): string {
-  if (totalSeconds < 60) {
-    return `${totalSeconds} 秒`;
-  }
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return seconds === 0 ? `${minutes} 分鐘` : `${minutes} 分 ${seconds} 秒`;
-}
-
-export async function sendChatMessage(
-  sessionId: string,
-  message: string,
-  client: ConversationClient
-): Promise<{ reply: string }> {
-  const artifacts = loadArtifacts(sessionId);
-  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-summary.md"));
-
-  const history: ConversationMessage[] = artifacts.chatHistory ?? [];
-  const messages: ConversationMessage[] = [...history, { role: "user", content: message }];
-  const reply = await client.send(systemPrompt, messages, 3000);
-
-  artifacts.chatHistory = [...messages, { role: "assistant", content: reply }];
-  saveArtifacts(sessionId, artifacts);
-
-  return { reply };
-}
-
-function buildAiReviewMessage(session: AppSession, artifacts: SessionArtifacts): string {
-  const { prInfo, prContext, files } = artifacts;
-  const totalPatchBudget = getTotalPatchBudget();
-  const totalPatchChars = files.reduce((sum, f) => sum + (f.numberedPatch?.length ?? 0), 0);
-
-  const fileBlocks = files.map((f) => {
-    const parts = [`### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`];
-    if (f.numberedPatch) {
-      let patch = f.numberedPatch;
-      if (totalPatchChars > totalPatchBudget) {
-        const budget = Math.floor((patch.length / totalPatchChars) * totalPatchBudget);
-        if (patch.length > budget) patch = patch.slice(0, budget) + "\n... (truncated)";
-      }
-      parts.push("```diff", patch, "```");
-    } else {
-      parts.push("(no textual diff)");
-    }
-    return parts.join("\n");
-  });
-
-  const prContextBlock = buildPrContextBlock(prContext);
-
-  return [
-    `PR #${session.prRef.number}: ${prInfo.title}`,
-    `Author: ${prInfo.author}`,
-    `Base: ${prInfo.base} → ${prInfo.head}`,
-    `Changes: +${prInfo.additions} -${prInfo.deletions}, ${prInfo.changedFiles} files`,
-    ...(prContextBlock ? ["", prContextBlock] : []),
-    "",
-    "## Changed Files",
-    "",
-    fileBlocks.join("\n\n")
-  ].join("\n");
-}
-
-function stripIssueSections(text: string): string {
-  const lines = text.split("\n");
-  const result: string[] = [];
-  let inIssueSection = false;
-  for (const line of lines) {
-    if (/^###\s*(必須修正|建議改善)/.test(line)) { inIssueSection = true; continue; }
-    if (/^###/.test(line)) { inIssueSection = false; }
-    if (!inIssueSection) result.push(line);
-  }
-  return result.join("\n").trim();
-}
-
-function parseAiComments(raw: string): {
-  analysis: string;
-  comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }>;
-} {
-  const match = /```json\s*([\s\S]*?)```\s*$/.exec(raw);
-  if (!match) return { analysis: raw, comments: [] };
-
-  const analysis = stripIssueSections(raw.slice(0, match.index).trimEnd());
-  try {
-    const parsed = JSON.parse(match[1] ?? "[]") as unknown;
-    if (!Array.isArray(parsed)) return { analysis, comments: [] };
-    const comments = parsed.flatMap((c) => {
-      if (typeof c !== "object" || c === null) return [];
-      const r = c as Record<string, unknown>;
-      if (typeof r["context"] !== "string" || typeof r["body"] !== "string") return [];
-      return [{
-        context: r["context"],
-        severity: r["severity"] === "should-fix" ? "should-fix" as const : "must-fix" as const,
-        description: typeof r["description"] === "string" ? r["description"] : "",
-        body: r["body"],
-        path: typeof r["path"] === "string" ? r["path"] : null,
-        line: typeof r["line"] === "number" ? r["line"] : null,
-        ...(r["alreadyTracked"] === true ? { alreadyTracked: true } : {})
-      }];
-    });
-    return { analysis, comments };
-  } catch {
-    return { analysis, comments: [] };
-  }
-}
-
-function groupCommentsByPath(comments: PrContext["reviewComments"]): Map<string, ExistingInlineComment[]> {
+export function groupCommentsByPath(comments: PrContext["reviewComments"]): Map<string, ExistingInlineComment[]> {
   const grouped = new Map<string, ExistingInlineComment[]>();
   for (const comment of comments) {
     const next = grouped.get(comment.path) ?? [];

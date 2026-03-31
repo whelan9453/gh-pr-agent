@@ -115,8 +115,9 @@ export interface ChatMessage {
 export interface SessionOverviewResponse {
   session: {
     id: string;
-    mode: "walkthrough" | "ui-review";
+    mode: string;
     prRef: PullRequestRef;
+    model?: string;
     prTitle: string;
     snapshotSha: string;
     createdAt: string;
@@ -125,9 +126,9 @@ export interface SessionOverviewResponse {
   prInfo: PullRequestInfo;
   prContext: {
     description: string;
-    reviews: PrReview[];
-    reviewComments: ExistingInlineComment[];
     issueComments: Array<{ author: string; body: string; createdAt: string }>;
+    reviews: PrReview[];
+    reviewComments: Array<{ id: number; author: string; path: string; line: number | null; side: ReviewCommentSide | null; startLine: number | null; startSide: ReviewCommentSide | null; replyToId: number | null; body: string; createdAt: string }>;
   };
   reviewSummary: string;
   drafts: DraftComment[];

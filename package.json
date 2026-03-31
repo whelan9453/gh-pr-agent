@@ -13,7 +13,7 @@
   "scripts": {
     "build":     "tsc -p tsconfig.json && vite build && mkdir -p dist/prompts && cp prompts/*.md dist/prompts/",
     "prepare":   "npm run build",
-    "dev":       "tsx --watch src/server/dev-ui-server.ts & vite --config vite.config.ts",
+    "dev":       "tsx --watch src/server/dev-server.ts & vite --config vite.config.ts",
     "test":      "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p ui/tsconfig.json"
   },

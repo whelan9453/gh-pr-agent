@@ -5,7 +5,7 @@ import { loadPrompt } from "../utils/prompt-loader.js";
 import { renderToTerminal } from "../utils/terminal-renderer.js";
 import { makeConversationClient, type ClientBackend } from "../clients/conversation-client.js";
 import { loadArtifacts, saveSession } from "./session-store.js";
-import { buildPrContextBlock, createSavedSession } from "./review-session.js";
+import { buildPrContextBlock, createSavedSession } from "./session.js";
 import type {
   AppSession,
   SessionArtifacts,

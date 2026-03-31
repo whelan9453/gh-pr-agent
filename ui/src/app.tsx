@@ -33,7 +33,7 @@ import type {
   FileSummary,
   ReviewCommentSide,
   SessionOverviewResponse
-} from "./types";
+} from "./api-types";
 
 interface SelectionState {
   side: ReviewCommentSide;
@@ -1063,7 +1063,6 @@ function shouldSubmitTextareaOnEnter(
 function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [input, setInput] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const [sendStartedAt, setSendStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
@@ -1074,12 +1073,10 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
 
   useEffect(() => {
     if (!props.sending) {
-      setSendStartedAt(null);
       setElapsedSeconds(0);
       return;
     }
     const startedAt = Date.now();
-    setSendStartedAt(startedAt);
     setElapsedSeconds(0);
     const timer = window.setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
@@ -1087,7 +1084,7 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
     return () => window.clearInterval(timer);
   }, [props.sending]);
 
-  const pendingLabel = sendStartedAt === null || elapsedSeconds <= 0
+  const pendingLabel = elapsedSeconds <= 0
     ? "AI 正在思考..."
     : `AI 正在思考... 已等待 ${elapsedSeconds} 秒`;
 
@@ -1130,7 +1127,7 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
               ) : null}
             </div>
           ))}
-          {props.sending ? (
+          {props.sending && (
             <div className="chat-message-group">
               <div className="chat-bubble assistant pending">
                 <p className="chat-pending-line">
@@ -1139,7 +1136,7 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
                 </p>
               </div>
             </div>
-          ) : null}
+          )}
           <div ref={bottomRef} />
         </div>
       )}

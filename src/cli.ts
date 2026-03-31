@@ -15,9 +15,9 @@ import {
   runSessionRepl,
   type InteractiveOptions
 } from "./services/interactive-session.js";
-import { summarizePr } from "./summarize-pr.js";
+import { summarizePr } from "./commands/summarize-pr.js";
 import { loadSession } from "./services/session-store.js";
-import { startUiServer } from "./server/ui-server.js";
+import { startUiServer } from "./server/server.js";
 import type { AppConfig, ModelPreset } from "./types.js";
 
 function readEnvSecret(name: string): string | undefined {

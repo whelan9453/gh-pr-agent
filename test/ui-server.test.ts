@@ -3,8 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import { createUiApp, type UiServerService } from "../src/server/ui-server.js";
-import type { SessionOverview } from "../src/services/review-session.js";
+import { createUiApp } from "../src/server/server.js";
+import type { UiServerService } from "../src/server/types.js";
+import type { SessionOverview } from "../src/services/session.js";
 import type { DraftComment, FileMaterial } from "../src/types.js";
 
 function makeStaticDir(): string {

@@ -1,4 +1,4 @@
-import type { AiReviewAnnotation, ChatMessage, DraftComment, DraftPayload, FileResponse, SessionOverviewResponse } from "./types";
+import type { AiReviewAnnotation, ChatMessage, DraftComment, DraftPayload, FileResponse, SessionOverviewResponse } from "./api-types";
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {

@@ -3,16 +3,16 @@ import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { makeConversationClient } from "./clients/conversation-client.js";
-import { GitHubClient, parsePullRequestUrl } from "./clients/github-client.js";
-import { getTotalPatchBudget } from "./config.js";
-import { buildNumberedPatch } from "./utils/diff-line-mapper.js";
-import { buildPrContextBlock } from "./services/review-session.js";
-import { writeProgress } from "./services/interactive-session.js";
-import { loadPrompt } from "./utils/prompt-loader.js";
-import { renderToTerminal } from "./utils/terminal-renderer.js";
-import type { InteractiveOptions } from "./services/interactive-session.js";
-import type { ConversationMessage } from "./types.js";
+import { makeConversationClient } from "../clients/conversation-client.js";
+import { GitHubClient, parsePullRequestUrl } from "../clients/github-client.js";
+import { getTotalPatchBudget } from "../config.js";
+import { buildNumberedPatch } from "../utils/diff-line-mapper.js";
+import { buildPrContextBlock } from "../services/session.js";
+import { writeProgress } from "../services/interactive-session.js";
+import { loadPrompt } from "../utils/prompt-loader.js";
+import { renderToTerminal } from "../utils/terminal-renderer.js";
+import type { InteractiveOptions } from "../services/interactive-session.js";
+import type { ConversationMessage } from "../types.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -144,7 +144,7 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     fileBlocks.join("\n\n")
   ].join("\n");
 
-  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "prompts", "pr-summary.md"));
+  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-summary.md"));
 
   writeProgress("Generating summary...");
   const client = makeConversationClient({
@@ -152,7 +152,7 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     azureFoundryBaseUrl: opts.azureFoundryBaseUrl,
     azureFoundryApiKey: opts.azureFoundryApiKey,
     deploymentName: opts.deploymentName,
-    ...(opts.claudeCliModel !== undefined ? { claudeCliModel: opts.claudeCliModel } : {}),
+    ...(opts.claudeCliModel !== undefined ? { claudeCliModel: opts.claudeCliModel } : {})
   });
 
   const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
