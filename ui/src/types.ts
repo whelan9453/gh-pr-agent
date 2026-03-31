@@ -103,6 +103,7 @@ export interface AiReviewAnnotation {
   body: string;
   path: string | null;
   line: number | null;
+  alreadyTracked?: boolean;
 }
 
 export interface ChatMessage {

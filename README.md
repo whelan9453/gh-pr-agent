@@ -107,7 +107,7 @@ Or open the UI with a PR URL prefilled:
 gh-pr-review ui https://github.com/OWNER/REPO/pull/123
 ```
 
-The UI opens in your browser, caches PR review data under `.gh-pr-agent/sessions`, lets you create local draft comments on diff ranges, and posts the final review back to GitHub in one submission.
+The UI opens in your browser, caches PR review data under `.gh-pr-agent/sessions`, lets you create local draft comments on diff ranges, and posts the final review back to GitHub in one submission. Stored sessions are pruned automatically to keep only the most recent 30 days and at most 100 sessions.
 
 Write JSON output:
 

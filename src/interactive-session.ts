@@ -96,10 +96,24 @@ export function buildPrContextBlock(prContext: PrContext): string {
   }
 
   if (prContext.reviewComments.length > 0) {
-    parts.push("", "Inline Review Comments:");
+    // Group into threads: root comments + their replies
+    const roots = prContext.reviewComments.filter((c) => c.replyToId === null);
+    const repliesByParent = new Map<number, typeof roots>();
     for (const c of prContext.reviewComments) {
-      const loc = c.line ? `:${c.line}` : "";
-      parts.push(`  @${c.author} on ${c.path}${loc} — "${c.body.trim()}"`);
+      if (c.replyToId !== null) {
+        const list = repliesByParent.get(c.replyToId) ?? [];
+        list.push(c);
+        repliesByParent.set(c.replyToId, list);
+      }
+    }
+    parts.push("", "Open Review Threads (already tracked — do NOT duplicate in findings):");
+    for (const root of roots) {
+      const loc = root.line ? `:${root.line}` : "";
+      parts.push(`  Thread on ${root.path}${loc}:`);
+      parts.push(`    @${root.author}: "${root.body.trim()}"`);
+      for (const reply of repliesByParent.get(root.id) ?? []) {
+        parts.push(`      @${reply.author} (reply): "${reply.body.trim()}"`);
+      }
     }
   }
 

@@ -1,7 +1,18 @@
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
 import path from "node:path";
 import type { AppSession, SessionArtifacts } from "./types.js";
+
+const MAX_SESSION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_SESSION_COUNT = 100;
 
 function findGhPrAgentDir(): string {
   try {
@@ -38,6 +49,7 @@ function artifactsPath(id: string): string {
 export function saveSession(session: AppSession): void {
   ensureSessionsDir();
   writeFileSync(sessionPath(session.id), JSON.stringify(session, null, 2), "utf8");
+  pruneStoredSessions([session.id]);
 }
 
 export function loadSession(id: string): AppSession {
@@ -51,6 +63,7 @@ export function loadSession(id: string): AppSession {
 export function saveArtifacts(sessionId: string, artifacts: SessionArtifacts): void {
   ensureSessionsDir();
   writeFileSync(artifactsPath(sessionId), JSON.stringify(artifacts, null, 2), "utf8");
+  pruneStoredSessions([sessionId]);
 }
 
 export function loadArtifacts(sessionId: string): SessionArtifacts {
@@ -59,4 +72,60 @@ export function loadArtifacts(sessionId: string): SessionArtifacts {
     throw new Error(`Session artifacts not found: ${sessionId}`);
   }
   return JSON.parse(readFileSync(file, "utf8")) as SessionArtifacts;
+}
+
+function pruneStoredSessions(protectedIds: string[] = []): void {
+  const dir = sessionsDir();
+  if (!existsSync(dir)) return;
+
+  const protectedIdSet = new Set(protectedIds);
+  const entries = readdirSync(dir);
+  const sessionEntries = entries
+    .filter((name) => name.endsWith(".json") && !name.endsWith("-artifacts.json"))
+    .map((name) => {
+      const file = path.join(dir, name);
+      const fallbackTime = statSync(file).mtimeMs;
+      const id = name.slice(0, -".json".length);
+      let updatedAt = fallbackTime;
+
+      try {
+        const session = JSON.parse(readFileSync(file, "utf8")) as Partial<AppSession>;
+        const parsedTime = Date.parse(session.updatedAt ?? session.createdAt ?? "");
+        if (!Number.isNaN(parsedTime)) {
+          updatedAt = parsedTime;
+        }
+      } catch {
+        updatedAt = fallbackTime;
+      }
+
+      return { id, file, updatedAt };
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const cutoff = Date.now() - MAX_SESSION_AGE_MS;
+  const recentIds = new Set(
+    sessionEntries
+      .filter((entry) => entry.updatedAt >= cutoff)
+      .slice(0, MAX_SESSION_COUNT)
+      .map((entry) => entry.id)
+  );
+
+  for (const id of protectedIdSet) {
+    recentIds.add(id);
+  }
+
+  for (const entry of sessionEntries) {
+    if (!recentIds.has(entry.id)) {
+      rmSync(entry.file, { force: true });
+      rmSync(artifactsPath(entry.id), { force: true });
+    }
+  }
+
+  for (const name of entries) {
+    if (!name.endsWith("-artifacts.json")) continue;
+    const id = name.slice(0, -"-artifacts.json".length);
+    if (recentIds.has(id)) continue;
+    if (protectedIdSet.has(id)) continue;
+    rmSync(path.join(dir, name), { force: true });
+  }
 }

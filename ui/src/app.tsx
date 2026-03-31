@@ -1125,6 +1125,9 @@ function AnnotationCard({
         <span className={`severity-badge severity-${annotation.severity}`}>{severityLabel}</span>
         <span className="annotation-card-index">{annIdx + 1}</span>
         <span className="annotation-card-context">{annotation.context}</span>
+        {annotation.alreadyTracked ? (
+          <span className="already-tracked-badge">💬 已有討論中</span>
+        ) : null}
       </div>
       {annotation.description ? (
         <p className="annotation-card-desc">{annotation.description}</p>

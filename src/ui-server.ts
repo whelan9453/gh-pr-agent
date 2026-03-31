@@ -70,7 +70,7 @@ export interface UiServerService {
     sessionId: string,
     payload: ReviewSubmissionPayload
   ): Promise<{ url: string; drafts: DraftComment[] }>;
-  runAiReview(sessionId: string, onProgress?: (message: string) => void, signal?: AbortSignal): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }>;
+  runAiReview(sessionId: string, onProgress?: (message: string) => void, signal?: AbortSignal): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> }>;
   sendAnnotationChat(sessionId: string, context: string, body: string, path: string | null, thread: Array<{ role: "user" | "assistant"; content: string }>, message: string): Promise<{ reply: string }>;
   sendChatMessage(sessionId: string, message: string): Promise<{ reply: string }>;
   getSettings(): BackendSettings;

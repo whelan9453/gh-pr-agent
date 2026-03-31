@@ -67,11 +67,15 @@ Issues that would cause bugs, regressions, security problems, or data loss if me
 - File and line reference if applicable
 - What the problem is and why it matters
 
+Include issues already raised in open review threads — but mark them clearly with "(已有 open thread 追蹤中)" so the reviewer knows they're being discussed.
+
 If there are none, say "無".
 
 ### 建議改善（Should Fix）
 
 Non-blocking but important: missing error handling, unclear logic, test gaps, naming issues. Keep this list short — 3 items max.
+
+Same rule: include tracked issues, but note "(已有 open thread 追蹤中)" where applicable.
 
 If there are none, say "無".
 
@@ -91,6 +95,7 @@ After the 結論, output a single fenced JSON block — no heading, no label, ju
 - `severity`: `"must-fix"` for 必須修正 items, `"should-fix"` for 建議改善 items.
 - `description`: one concise sentence in Traditional Chinese — this is shown in the UI card next to the jump link.
 - `path` and `line`: use when the issue refers to a specific file and line in the diff (new-file line numbers). Otherwise `null`.
+- `alreadyTracked`: `true` if this issue is already raised in an open review thread from the PR Discussion; omit or `false` otherwise.
 - If there are no issues, output `[]`.
 
 ## Rules

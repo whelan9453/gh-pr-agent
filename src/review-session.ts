@@ -302,7 +302,7 @@ export async function runAiReview(
   client: ConversationClient,
   onProgress?: (message: string) => void,
   signal?: AbortSignal
-): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }> }> {
+): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> }> {
   onProgress?.("載入 PR 資料...");
   const session = loadSession(sessionId);
   const artifacts = loadArtifacts(sessionId);
@@ -400,7 +400,7 @@ function stripIssueSections(text: string): string {
 
 function parseAiComments(raw: string): {
   analysis: string;
-  comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null }>;
+  comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }>;
 } {
   const match = /```json\s*([\s\S]*?)```\s*$/.exec(raw);
   if (!match) return { analysis: raw, comments: [] };
@@ -419,7 +419,8 @@ function parseAiComments(raw: string): {
         description: typeof r["description"] === "string" ? r["description"] : "",
         body: r["body"],
         path: typeof r["path"] === "string" ? r["path"] : null,
-        line: typeof r["line"] === "number" ? r["line"] : null
+        line: typeof r["line"] === "number" ? r["line"] : null,
+        ...(r["alreadyTracked"] === true ? { alreadyTracked: true } : {})
       }];
     });
     return { analysis, comments };
