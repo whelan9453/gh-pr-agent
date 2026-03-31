@@ -971,11 +971,47 @@ input[type="text"]:focus {
   color: var(--ink);
 }
 
+.chat-bubble.pending {
+  border-style: dashed;
+  color: var(--muted);
+}
+
 .chat-bubble.user {
   background: var(--accent-soft);
   border: 1px solid rgba(56, 139, 253, 0.25);
   color: var(--ink);
   align-self: flex-end;
+}
+
+.chat-pending-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.chat-pending-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.45);
+  animation: chat-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chat-pulse {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.45);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0.5rem rgba(88, 166, 255, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0);
+  }
 }
 
 .annotation-cards-list {

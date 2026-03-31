@@ -240,6 +240,38 @@ describe("ReviewWorkspace", () => {
     expect(await screen.findByText("看起來大致修正了，但還要補 enum 驗證。")).toBeTruthy();
   });
 
+  it("shows a pending assistant state while the main chat request is in flight", () => {
+    render(
+      <ReviewWorkspace
+        session={makeSession()}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={true}
+        chatMessages={[{ role: "user", content: "上次那個 must-fix 為什麼不見了？" }]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.getByText("AI 正在思考...")).toBeTruthy();
+  });
+
   it("does not submit the main chat while IME composition is active", async () => {
     const onSendChatMessage = vi.fn().mockResolvedValue(undefined);
 

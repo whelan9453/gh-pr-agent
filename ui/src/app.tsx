@@ -1063,12 +1063,33 @@ function shouldSubmitTextareaOnEnter(
 function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [input, setInput] = useState("");
   const [isComposing, setIsComposing] = useState(false);
+  const [sendStartedAt, setSendStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [props.messages]);
+
+  useEffect(() => {
+    if (!props.sending) {
+      setSendStartedAt(null);
+      setElapsedSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setSendStartedAt(startedAt);
+    setElapsedSeconds(0);
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [props.sending]);
+
+  const pendingLabel = sendStartedAt === null || elapsedSeconds <= 0
+    ? "AI 正在思考..."
+    : `AI 正在思考... 已等待 ${elapsedSeconds} 秒`;
 
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
@@ -1109,6 +1130,16 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
               ) : null}
             </div>
           ))}
+          {props.sending ? (
+            <div className="chat-message-group">
+              <div className="chat-bubble assistant pending">
+                <p className="chat-pending-line">
+                  <span className="chat-pending-dot" aria-hidden="true" />
+                  {pendingLabel}
+                </p>
+              </div>
+            </div>
+          ) : null}
           <div ref={bottomRef} />
         </div>
       )}
