@@ -8,6 +8,7 @@ import React, {
   useState
 } from "react";
 import type { JSX } from "react";
+import { flushSync } from "react-dom";
 import {
   createSession,
   deleteDraft,
@@ -1053,7 +1054,9 @@ function ChatPanel(props: ChatPanelProps): JSX.Element {
     event.preventDefault();
     const message = input.trim();
     if (!message || props.sending) return;
-    setInput("");
+    flushSync(() => {
+      setInput("");
+    });
     void props.onSend(message);
   }
 
@@ -1130,7 +1133,9 @@ function AnnotationCard({
     e?.preventDefault();
     const msg = chatInput.trim();
     if (!msg || state.sending) return;
-    setChatInput("");
+    flushSync(() => {
+      setChatInput("");
+    });
     await handlers.onSendMessage(cardKey, annotation, state.thread, msg);
   }
 
