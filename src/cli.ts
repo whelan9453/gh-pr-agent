@@ -181,23 +181,6 @@ function buildProgram(): Command {
       await runSessionRepl(session, interactiveOpts, true);
     });
 
-  // ── walkthrough <pr-url> ─────────────────────────────────────────────────
-  const walkthroughCmd = new Command("walkthrough")
-    .description("Start an interactive walkthrough session for a PR")
-    .argument("<pr-url>", "GitHub pull request URL")
-    .option("--model <preset>", "Model preset: sonnet or haiku", "haiku")
-    .option("--prompt-file <path>", "Path to a custom prompt file")
-    .option("--verbose", "Show detailed progress logs")
-    .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
-    .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
-    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
-    .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
-    .action(async (prUrl: string, options) => {
-      const interactiveOpts = await resolveInteractiveOptions(options);
-      const session = await createWalkthroughSession(prUrl, interactiveOpts);
-      await runSessionRepl(session, interactiveOpts, true);
-    });
-
   // ── resume <session-id> ──────────────────────────────────────────────────
   const resumeCmd = new Command("resume")
     .description("Resume an existing interactive session")
@@ -250,7 +233,6 @@ function buildProgram(): Command {
       await summarizePr(prUrl, interactiveOpts);
     });
 
-  program.addCommand(walkthroughCmd);
   program.addCommand(summaryCmd);
   program.addCommand(resumeCmd);
   program.addCommand(uiCmd);
