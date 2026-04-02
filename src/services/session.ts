@@ -155,10 +155,10 @@ export async function fetchPrArtifacts(
 
   const commentsByPath = groupCommentsByPath(reviewComments);
 
-  const files = await Promise.all(
-    changedFiles.map((file) =>
-      materializeFile(prRef, prInfo, file, commentsByPath.get(file.path) ?? [], github)
-    )
+  const files = await mapWithConcurrency(
+    changedFiles,
+    (file) => materializeFile(prRef, prInfo, file, commentsByPath.get(file.path) ?? [], github),
+    5
   );
 
   return {
@@ -414,6 +414,23 @@ function normalizeDraftComment(
 
 function stripJsonFence(text: string): string {
   return text.replace(/```json\s*[\s\S]*?```\s*$/m, "").trimEnd();
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  concurrency: number
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]!);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
 }
 
 function sortDrafts(drafts: DraftComment[]): DraftComment[] {
