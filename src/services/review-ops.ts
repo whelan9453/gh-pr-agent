@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GitHubClient } from "../clients/github-client.js";
-import { getBatchSize, getTotalPatchBudget } from "../config.js";
+import { getBatchPatchBudget, getTotalPatchBudget } from "../config.js";
 import { loadPrompt } from "../utils/prompt-loader.js";
 import type { ConversationClient } from "../clients/conversation-client.js";
 import {
@@ -124,9 +124,9 @@ export async function runAiReview(
   const artifacts = loadArtifacts(sessionId);
 
   const fileCount = artifacts.files.length;
-  const batchSize = getBatchSize();
+  const totalPatchChars = artifacts.files.reduce((s, f) => s + (f.numberedPatch?.length ?? 0), 0);
 
-  if (fileCount > batchSize) {
+  if (totalPatchChars > getTotalPatchBudget()) {
     return runBatchedAiReview(sessionId, session, artifacts, client, onProgress, signal, backendLabel);
   }
 
@@ -173,8 +173,7 @@ async function runBatchedAiReview(
   signal?: AbortSignal,
   backendLabel = "AI"
 ): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> }> {
-  const batchSize = getBatchSize();
-  const batches = splitIntoBatches(artifacts.files, batchSize);
+  const batches = splitIntoBatchesBySize(artifacts.files, getBatchPatchBudget());
   const totalBatches = batches.length;
 
   onProgress?.("載入分析提示詞...");
@@ -263,19 +262,34 @@ export async function sendChatMessage(
 
 type RawComment = { context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean };
 
-function splitIntoBatches<T>(items: T[], size: number): T[][] {
-  const batches: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    batches.push(items.slice(i, i + size));
+function splitIntoBatchesBySize(files: FileMaterial[], budgetPerBatch: number): FileMaterial[][] {
+  const batches: FileMaterial[][] = [];
+  let current: FileMaterial[] = [];
+  let currentSize = 0;
+
+  for (const file of files) {
+    const fileSize = file.numberedPatch?.length ?? 0;
+    if (current.length > 0 && currentSize + fileSize > budgetPerBatch) {
+      batches.push(current);
+      current = [file];
+      currentSize = fileSize;
+    } else {
+      current.push(file);
+      currentSize += fileSize;
+    }
   }
+
+  if (current.length > 0) {
+    batches.push(current);
+  }
+
   return batches;
 }
 
 function buildBatchMessage(session: AppSession, artifacts: SessionArtifacts, batchFiles: FileMaterial[]): string {
   const { prInfo, prContext } = artifacts;
-  const totalPatchBudget = getTotalPatchBudget();
   const patchLengths = batchFiles.map((f) => f.numberedPatch?.length ?? 0);
-  const budgets = allocateFilePatchBudgets(patchLengths, totalPatchBudget);
+  const budgets = allocateFilePatchBudgets(patchLengths, getBatchPatchBudget());
 
   const fileBlocks = batchFiles.map((f, i) => {
     const parts = [`### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`];

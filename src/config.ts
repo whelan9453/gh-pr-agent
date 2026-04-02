@@ -71,3 +71,7 @@ export function getTotalPatchBudget(): number {
 export function getBatchSize(): number {
   return readOptionalPositiveIntEnv("BATCH_SIZE") ?? 10;
 }
+
+export function getBatchPatchBudget(): number {
+  return readOptionalPositiveIntEnv("BATCH_PATCH_BUDGET") ?? 500_000;
+}
