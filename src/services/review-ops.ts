@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GitHubClient } from "../clients/github-client.js";
-import { getTotalPatchBudget } from "../config.js";
+import { getBatchSize, getTotalPatchBudget } from "../config.js";
 import { loadPrompt } from "../utils/prompt-loader.js";
 import type { ConversationClient } from "../clients/conversation-client.js";
 import {
@@ -14,6 +14,7 @@ import { buildPrContextBlock, groupCommentsByPath } from "./session.js";
 import type {
   AppSession,
   ConversationMessage,
+  FileMaterial,
   ReviewSubmissionPayload,
   SessionArtifacts
 } from "../types.js";
@@ -122,10 +123,16 @@ export async function runAiReview(
   const session = loadSession(sessionId);
   const artifacts = loadArtifacts(sessionId);
 
+  const fileCount = artifacts.files.length;
+  const batchSize = getBatchSize();
+
+  if (fileCount > batchSize) {
+    return runBatchedAiReview(sessionId, session, artifacts, client, onProgress, signal, backendLabel);
+  }
+
   onProgress?.("載入分析提示詞...");
   const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-summary.md"));
 
-  const fileCount = artifacts.files.length;
   const totalChanges = artifacts.files.reduce((s, f) => s + f.additions + f.deletions, 0);
   onProgress?.(`組合差異內容（${fileCount} 個檔案，${totalChanges} 行變更）...`);
   const userMessage = buildAiReviewMessage(session, artifacts);
@@ -157,6 +164,85 @@ export async function runAiReview(
   return { analysis, draftCount: 0, comments };
 }
 
+async function runBatchedAiReview(
+  sessionId: string,
+  session: AppSession,
+  artifacts: SessionArtifacts,
+  client: ConversationClient,
+  onProgress?: (message: string) => void,
+  signal?: AbortSignal,
+  backendLabel = "AI"
+): Promise<{ analysis: string; draftCount: number; comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> }> {
+  const batchSize = getBatchSize();
+  const batches = splitIntoBatches(artifacts.files, batchSize);
+  const totalBatches = batches.length;
+
+  onProgress?.("載入分析提示詞...");
+  const [batchSystemPrompt, synthesizeSystemPrompt] = await Promise.all([
+    loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-batch-review.md")),
+    loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-synthesize.md"))
+  ]);
+
+  onProgress?.(`將 ${artifacts.files.length} 個檔案分成 ${totalBatches} 批次進行分析...`);
+
+  const allBatchComments: RawComment[][] = [];
+
+  for (let i = 0; i < batches.length; i++) {
+    if (signal?.aborted) break;
+
+    const batch = batches[i]!;
+    const fileNames = batch.map((f) => f.path).join(", ");
+    onProgress?.(`分析第 ${i + 1}/${totalBatches} 批次（${batch.length} 個檔案）...`);
+
+    const batchMessage = buildBatchMessage(session, artifacts, batch);
+    const raw = await client.send(
+      batchSystemPrompt,
+      [{ role: "user", content: batchMessage }],
+      4096,
+      signal
+    );
+    const comments = parseJsonCommentBlock(raw);
+    allBatchComments.push(comments);
+
+    if (comments.length > 0) {
+      onProgress?.(`第 ${i + 1} 批次找到 ${comments.length} 個問題（${fileNames}）`);
+    }
+  }
+
+  if (signal?.aborted) {
+    return { analysis: "", draftCount: 0, comments: [] };
+  }
+
+  onProgress?.(`合成 ${totalBatches} 批次的分析結果...`);
+  const synthesizeMessage = buildSynthesizeMessage(session, artifacts, batches, allBatchComments);
+
+  const startedAt = Date.now();
+  const heartbeat = setInterval(() => {
+    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    onProgress?.(`${backendLabel} 合成中，已等待 ${formatElapsed(elapsedSeconds)}...`);
+  }, 15_000);
+  const synthesizeRaw = await client.send(
+    synthesizeSystemPrompt,
+    [{ role: "user", content: synthesizeMessage }],
+    8192,
+    signal
+  ).finally(() => {
+    clearInterval(heartbeat);
+  });
+
+  onProgress?.("解析分析結果...");
+  const { analysis, comments } = parseAiComments(synthesizeRaw);
+
+  const updated = loadArtifacts(sessionId);
+  updated.chatHistory = [
+    { role: "user", content: synthesizeMessage },
+    { role: "assistant", content: synthesizeRaw }
+  ];
+  saveArtifacts(sessionId, updated);
+
+  return { analysis, draftCount: 0, comments };
+}
+
 export async function sendChatMessage(
   sessionId: string,
   message: string,
@@ -173,6 +259,93 @@ export async function sendChatMessage(
   saveArtifacts(sessionId, artifacts);
 
   return { reply };
+}
+
+type RawComment = { context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean };
+
+function splitIntoBatches<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+  return batches;
+}
+
+function buildBatchMessage(session: AppSession, artifacts: SessionArtifacts, batchFiles: FileMaterial[]): string {
+  const { prInfo, prContext } = artifacts;
+  const totalPatchBudget = getTotalPatchBudget();
+  const patchLengths = batchFiles.map((f) => f.numberedPatch?.length ?? 0);
+  const budgets = allocateFilePatchBudgets(patchLengths, totalPatchBudget);
+
+  const fileBlocks = batchFiles.map((f, i) => {
+    const parts = [`### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`];
+    if (f.numberedPatch) {
+      const budget = budgets[i] ?? 0;
+      const patch =
+        f.numberedPatch.length > budget
+          ? f.numberedPatch.slice(0, budget) + "\n... (truncated)"
+          : f.numberedPatch;
+      parts.push("```diff", patch, "```");
+    } else {
+      parts.push("(no textual diff)");
+    }
+    return parts.join("\n");
+  });
+
+  const prContextBlock = buildPrContextBlock(prContext);
+
+  return [
+    `PR #${session.prRef.number}: ${prInfo.title}`,
+    `Author: ${prInfo.author}`,
+    `Base: ${prInfo.base} → ${prInfo.head}`,
+    ...(prContextBlock ? ["", prContextBlock] : []),
+    "",
+    "## Changed Files (this batch)",
+    "",
+    fileBlocks.join("\n\n")
+  ].join("\n");
+}
+
+function buildSynthesizeMessage(
+  session: AppSession,
+  artifacts: SessionArtifacts,
+  batches: FileMaterial[][],
+  allBatchComments: RawComment[][]
+): string {
+  const { prInfo, prContext } = artifacts;
+
+  const allFilesBlock = artifacts.files
+    .map((f) => `- ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`)
+    .join("\n");
+
+  const batchSections = batches.map((batch, i) => {
+    const fileList = batch.map((f) => f.path).join(", ");
+    const comments = allBatchComments[i] ?? [];
+    return [
+      `### Batch ${i + 1} (${batch.length} files: ${fileList})`,
+      "```json",
+      JSON.stringify(comments, null, 2),
+      "```"
+    ].join("\n");
+  });
+
+  const prContextBlock = buildPrContextBlock(prContext);
+
+  return [
+    `PR #${session.prRef.number}: ${prInfo.title}`,
+    `Author: ${prInfo.author}`,
+    `Base: ${prInfo.base} → ${prInfo.head}`,
+    `Changes: +${prInfo.additions} -${prInfo.deletions}, ${prInfo.changedFiles} files`,
+    ...(prContextBlock ? ["", prContextBlock] : []),
+    "",
+    "## All Changed Files",
+    "",
+    allFilesBlock,
+    "",
+    "## Per-Batch Findings",
+    "",
+    batchSections.join("\n\n")
+  ].join("\n");
 }
 
 const MIN_PER_FILE_PATCH_CHARS = 3_000;
@@ -249,18 +422,13 @@ function stripIssueSections(text: string): string {
   return result.join("\n").trim();
 }
 
-function parseAiComments(raw: string): {
-  analysis: string;
-  comments: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }>;
-} {
+function parseJsonCommentBlock(raw: string): RawComment[] {
   const match = /```json\s*([\s\S]*?)```\s*$/.exec(raw);
-  if (!match) return { analysis: raw, comments: [] };
-
-  const analysis = stripIssueSections(raw.slice(0, match.index).trimEnd());
+  if (!match) return [];
   try {
     const parsed = JSON.parse(match[1] ?? "[]") as unknown;
-    if (!Array.isArray(parsed)) return { analysis, comments: [] };
-    const comments = parsed.flatMap((c) => {
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((c) => {
       if (typeof c !== "object" || c === null) return [];
       const r = c as Record<string, unknown>;
       if (typeof r["context"] !== "string" || typeof r["body"] !== "string") return [];
@@ -274,8 +442,14 @@ function parseAiComments(raw: string): {
         ...(r["alreadyTracked"] === true ? { alreadyTracked: true } : {})
       }];
     });
-    return { analysis, comments };
   } catch {
-    return { analysis, comments: [] };
+    return [];
   }
+}
+
+function parseAiComments(raw: string): { analysis: string; comments: RawComment[] } {
+  const match = /```json\s*([\s\S]*?)```\s*$/.exec(raw);
+  if (!match) return { analysis: raw, comments: [] };
+  const analysis = stripIssueSections(raw.slice(0, match.index).trimEnd());
+  return { analysis, comments: parseJsonCommentBlock(raw) };
 }

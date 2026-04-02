@@ -67,3 +67,7 @@ export function resolveConfig(options: ResolveConfigOptions): AppConfig {
 export function getTotalPatchBudget(): number {
   return readOptionalPositiveIntEnv("TOTAL_PATCH_BUDGET") ?? DEFAULT_TOTAL_PATCH_BUDGET;
 }
+
+export function getBatchSize(): number {
+  return readOptionalPositiveIntEnv("BATCH_SIZE") ?? 10;
+}
