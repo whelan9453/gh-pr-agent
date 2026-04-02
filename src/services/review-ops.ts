@@ -175,19 +175,37 @@ export async function sendChatMessage(
   return { reply };
 }
 
+const MIN_PER_FILE_PATCH_CHARS = 3_000;
+
+function allocateFilePatchBudgets(patchLengths: number[], totalBudget: number): number[] {
+  const total = patchLengths.reduce((s, n) => s + n, 0);
+  if (total <= totalBudget) return [...patchLengths];
+
+  const count = patchLengths.length;
+  // Floor: at least MIN_PER_FILE_PATCH_CHARS, but never more than an equal share of the budget
+  const floor = Math.min(MIN_PER_FILE_PATCH_CHARS, Math.floor(totalBudget / count));
+
+  return patchLengths.map((len) => {
+    const proportional = Math.floor((len / total) * totalBudget);
+    return Math.max(floor, proportional);
+  });
+}
+
 function buildAiReviewMessage(session: AppSession, artifacts: SessionArtifacts): string {
   const { prInfo, prContext, files } = artifacts;
   const totalPatchBudget = getTotalPatchBudget();
-  const totalPatchChars = files.reduce((sum, f) => sum + (f.numberedPatch?.length ?? 0), 0);
 
-  const fileBlocks = files.map((f) => {
+  const patchLengths = files.map((f) => f.numberedPatch?.length ?? 0);
+  const budgets = allocateFilePatchBudgets(patchLengths, totalPatchBudget);
+
+  const fileBlocks = files.map((f, i) => {
     const parts = [`### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`];
     if (f.numberedPatch) {
-      let patch = f.numberedPatch;
-      if (totalPatchChars > totalPatchBudget) {
-        const budget = Math.floor((patch.length / totalPatchChars) * totalPatchBudget);
-        if (patch.length > budget) patch = patch.slice(0, budget) + "\n... (truncated)";
-      }
+      const budget = budgets[i] ?? 0;
+      const patch =
+        f.numberedPatch.length > budget
+          ? f.numberedPatch.slice(0, budget) + "\n... (truncated)"
+          : f.numberedPatch;
       parts.push("```diff", patch, "```");
     } else {
       parts.push("(no textual diff)");
