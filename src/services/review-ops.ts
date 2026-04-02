@@ -2,6 +2,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GitHubClient } from "../clients/github-client.js";
 import { getBatchPatchBudget, getTotalPatchBudget } from "../config.js";
+import {
+  gitRemoteMatchesPr,
+  isCodexCliAvailable,
+  isGitRepo,
+  runCodexLocalReview
+} from "../utils/local-repo-check.js";
 import { loadPrompt } from "../utils/prompt-loader.js";
 import type { ConversationClient } from "../clients/conversation-client.js";
 import {
@@ -176,6 +182,19 @@ async function runBatchedAiReview(
   const batches = splitIntoBatchesBySize(artifacts.files, getBatchPatchBudget());
   const totalBatches = batches.length;
 
+  // Start codex local review concurrently — silently skipped if prerequisites not met
+  const cwd = process.cwd();
+  const codexPromise: Promise<string | null> = (async () => {
+    const [repoMatch, codexAvailable] = await Promise.all([
+      isGitRepo(cwd).then((ok) =>
+        ok ? gitRemoteMatchesPr(cwd, session.prRef.owner, session.prRef.repo) : false
+      ),
+      isCodexCliAvailable()
+    ]);
+    if (!repoMatch || !codexAvailable) return null;
+    return runCodexLocalReview(artifacts.prInfo.base, signal);
+  })();
+
   onProgress?.("載入分析提示詞...");
   const [batchSystemPrompt, synthesizeSystemPrompt] = await Promise.all([
     loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-batch-review.md")),
@@ -212,8 +231,10 @@ async function runBatchedAiReview(
     return { analysis: "", draftCount: 0, comments: [] };
   }
 
+  const localCodexOutput = await codexPromise;
+
   onProgress?.(`合成 ${totalBatches} 批次的分析結果...`);
-  const synthesizeMessage = buildSynthesizeMessage(session, artifacts, batches, allBatchComments);
+  const synthesizeMessage = buildSynthesizeMessage(session, artifacts, batches, allBatchComments, localCodexOutput);
 
   const startedAt = Date.now();
   const heartbeat = setInterval(() => {
@@ -324,7 +345,8 @@ function buildSynthesizeMessage(
   session: AppSession,
   artifacts: SessionArtifacts,
   batches: FileMaterial[][],
-  allBatchComments: RawComment[][]
+  allBatchComments: RawComment[][],
+  localCodexOutput?: string | null
 ): string {
   const { prInfo, prContext } = artifacts;
 
@@ -358,7 +380,10 @@ function buildSynthesizeMessage(
     "",
     "## Per-Batch Findings",
     "",
-    batchSections.join("\n\n")
+    batchSections.join("\n\n"),
+    ...(localCodexOutput
+      ? ["", "## Local Code Analysis (Codex Review)", "", localCodexOutput]
+      : [])
   ].join("\n");
 }
 
