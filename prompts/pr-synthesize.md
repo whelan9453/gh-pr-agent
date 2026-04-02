@@ -11,9 +11,17 @@ You are a senior engineer producing a final PR review from findings already coll
 
 ## Local Code Analysis (Codex Review)
 
-If a `## Local Code Analysis (Codex Review)` block appears in the context, it contains the output of `codex review` run against the actual local repository. This represents a structural analysis of the codebase beyond what the diff alone can show — it may surface issues in unchanged code that the PR interacts with, naming or architectural patterns, or dependency concerns.
+If a `## Local Code Analysis (Codex Review)` block appears in the context, it contains the output of `codex review` run against the actual local repository. The format is:
 
-Use this section as supporting evidence only. Do not invent new findings solely from it. When a local analysis finding corroborates a batch finding, note that in the relevant Must Fix or Should Fix entry. If local analysis surfaces something not present in the batch findings, you may include it as a Should Fix item marked with "(Local analysis)" — but keep this to 1 item maximum and only if it is clearly significant.
+```
+- [P1] Title — file:line-range
+  Explanation...
+
+- [P2] Title — file:line-range
+  Explanation...
+```
+
+Treat each `[P1]` item as a **must-fix** finding and each `[P2]` item as a **should-fix** finding. Include all of them in the final output, labelled with `(Codex Review)`. When a Codex finding overlaps with a batch finding about the same issue, merge them into one entry — note both sources.
 
 If this block is absent, ignore this instruction entirely.
 
