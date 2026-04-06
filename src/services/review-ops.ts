@@ -232,6 +232,9 @@ async function runBatchedAiReview(
   }
 
   const localCodexOutput = await codexPromise;
+  if (localCodexOutput) {
+    onProgress?.("已取得 Codex Review 結果，納入合成分析");
+  }
 
   onProgress?.(`合成 ${totalBatches} 批次的分析結果...`);
   const synthesizeMessage = buildSynthesizeMessage(session, artifacts, batches, allBatchComments, localCodexOutput);
