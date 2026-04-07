@@ -601,6 +601,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const file = props.fileData?.file ?? null;
   const fileDrafts = props.fileData?.drafts ?? [];   // current file only — for inline diff display
   const allDrafts = props.session.drafts;             // all files — for sidebar + confirm sheet
+  const canSubmitReview = reviewEvent === "APPROVE" || allDrafts.length > 0 || !!props.reviewBody.trim();
   const selectionSummary = file && selection ? describeSelection(file, selection) : null;
 
   const commentsByRow = useMemo(() => buildCommentIndex(file), [file]);
@@ -999,7 +1000,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             />
             <button
               type="button"
-              disabled={props.submittingReview || (allDrafts.length === 0 && !props.reviewBody.trim())}
+              disabled={props.submittingReview}
               onClick={() => setConfirmOpen(true)}
             >
               {props.submittingReview ? "送出中..." : "送出 Review"}
@@ -1036,7 +1037,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                 </button>
                 <button
                   type="button"
+                  disabled={!canSubmitReview}
                   onClick={() => {
+                    if (!canSubmitReview) return;
                     setConfirmOpen(false);
                     void props.onSubmitReview(props.reviewBody, reviewEvent);
                   }}
