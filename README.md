@@ -5,8 +5,8 @@ A local CLI and web UI for reviewing GitHub pull requests with AI. Supports Code
 ## Requirements
 
 - Node.js 22 LTS or 24 LTS
-- A GitHub PAT with read access to the target repository
-- At least one AI backend: [Codex CLI](https://github.com/openai/codex) (default), [Claude CLI](https://github.com/anthropics/claude-code), or Azure Foundry
+- A GitHub PAT with `Contents: Read` and `Pull Requests: Read` (add `Write` if you plan to post comments) access to the target repository
+- At least one AI backend: [Codex CLI](https://github.com/openai/codex) (default), [Claude CLI](https://github.com/anthropics/claude-code), or Azure Foundry. *(If using a CLI backend, ensure it is installed and authenticated in your terminal first).*
 
 ## Setup
 
