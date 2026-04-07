@@ -916,25 +916,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
               <option value="codex-cli">Codex CLI</option>
               <option value="foundry">Azure Foundry</option>
             </select>
-            {props.backendSettings.backend === "claude-cli" && (
-              <input
-                type="text"
-                value={props.backendSettings.claudeCliModel}
-                disabled={props.runningAiReview}
-                onChange={(e) => props.onBackendSettingsChange({ claudeCliModel: e.target.value })}
-                style={{ fontSize: "0.75rem", padding: "2px 4px", width: "160px" }}
-              />
-            )}
-            {props.backendSettings.backend === "codex-cli" && (
-              <input
-                type="text"
-                value={props.backendSettings.codexCliModel}
-                placeholder="default model"
-                disabled={props.runningAiReview}
-                onChange={(e) => props.onBackendSettingsChange({ codexCliModel: e.target.value })}
-                style={{ fontSize: "0.75rem", padding: "2px 4px", width: "160px" }}
-              />
-            )}
           </div>
           <button
             type="button"
