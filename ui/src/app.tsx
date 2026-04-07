@@ -603,7 +603,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const allDrafts = props.session.drafts;             // all files — for sidebar + confirm sheet
   const selectionSummary = file && selection ? describeSelection(file, selection) : null;
 
-  const commentsByRow = useMemo(() => buildCommentIndex(file), [file]);
+  const commentIndex = useMemo(() => buildCommentIndex(file), [file]);
 
   const draftsByEndKey = useMemo(() => {
     const map = new Map<string, typeof fileDrafts>();
@@ -760,16 +760,18 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                   if (diffMode === "split") {
                     const leftSelected = selection ? rowIsSelected(file, row, "LEFT", selection) : false;
                     const rightSelected = selection ? rowIsSelected(file, row, "RIGHT", selection) : false;
-                    const leftComments = commentsByRow.get(`LEFT:${row.key}`) ?? [];
-                    const rightComments = commentsByRow.get(`RIGHT:${row.key}`) ?? [];
+                    const leftAnchoredComments = commentIndex.anchored.get(`LEFT:${row.key}`) ?? [];
+                    const rightAnchoredComments = commentIndex.anchored.get(`RIGHT:${row.key}`) ?? [];
+                    const leftCovered = (commentIndex.covered.get(`LEFT:${row.key}`) ?? []).length > 0;
+                    const rightCovered = (commentIndex.covered.get(`RIGHT:${row.key}`) ?? []).length > 0;
                     elements.push(
                       <div className="diff-row" key={row.key} id={`diff-row-${row.key}`}>
                         <DiffCell
                           row={row}
                           side="LEFT"
                           selected={leftSelected}
-                          commented={leftComments.length > 0}
-                          comments={leftComments}
+                          commented={leftCovered}
+                          comments={leftAnchoredComments}
                           onMouseDown={(shiftKey) => handleRowPress(row, "LEFT", shiftKey)}
                           onMouseEnter={() => handleRowHover(row, "LEFT")}
                         />
@@ -777,8 +779,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                           row={row}
                           side="RIGHT"
                           selected={rightSelected}
-                          commented={rightComments.length > 0}
-                          comments={rightComments}
+                          commented={rightCovered}
+                          comments={rightAnchoredComments}
                           onMouseDown={(shiftKey) => handleRowPress(row, "RIGHT", shiftKey)}
                           onMouseEnter={() => handleRowHover(row, "RIGHT")}
                         />
@@ -789,7 +791,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                     const text = isDel ? row.leftText : row.rightText;
                     const selectable = !isDel && row.rightSelectable;
                     const selected = selectable && selection ? rowIsSelected(file, row, "RIGHT", selection) : false;
-                    const comments = commentsByRow.get(`RIGHT:${row.key}`) ?? [];
+                    const comments = commentIndex.anchored.get(`RIGHT:${row.key}`) ?? [];
+                    const commented = (commentIndex.covered.get(`RIGHT:${row.key}`) ?? []).length > 0;
                     elements.push(
                       <div
                         key={row.key}
@@ -803,7 +806,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                         <span className="unified-new-no">{!isDel ? (row.newLine ?? "") : ""}</span>
                         <button
                           type="button"
-                          className={["unified-code", selectable ? "selectable" : "", selected ? "selected" : "", comments.length > 0 ? "commented" : ""].filter(Boolean).join(" ")}
+                          className={["unified-code", selectable ? "selectable" : "", selected ? "selected" : "", commented ? "commented" : ""].filter(Boolean).join(" ")}
                           disabled={!selectable}
                           aria-label={`RIGHT line ${row.newLine ?? row.oldLine ?? "blank"}`}
                           onMouseDown={(e) => { if (selectable) handleRowPress(row, "RIGHT", e.shiftKey); }}
@@ -1362,10 +1365,14 @@ function DiffCell(props: DiffCellProps): JSX.Element {
   );
 }
 
-function buildCommentIndex(file: FileMaterial | null): Map<string, ExistingInlineComment[]> {
-  const index = new Map<string, ExistingInlineComment[]>();
+function buildCommentIndex(file: FileMaterial | null): {
+  covered: Map<string, ExistingInlineComment[]>;
+  anchored: Map<string, ExistingInlineComment[]>;
+} {
+  const covered = new Map<string, ExistingInlineComment[]>();
+  const anchored = new Map<string, ExistingInlineComment[]>();
   if (!file) {
-    return index;
+    return { covered, anchored };
   }
 
   for (const row of file.diffRows) {
@@ -1373,14 +1380,19 @@ function buildCommentIndex(file: FileMaterial | null): Map<string, ExistingInlin
       continue;
     }
     for (const side of ["LEFT", "RIGHT"] as const) {
-      const matches = file.existingComments.filter((comment) => commentMatchesRow(comment, row, side));
-      if (matches.length > 0) {
-        index.set(`${side}:${row.key}`, matches);
+      const coveredMatches = file.existingComments.filter((comment) => commentCoversRow(comment, row, side));
+      if (coveredMatches.length > 0) {
+        covered.set(`${side}:${row.key}`, coveredMatches);
+      }
+
+      const anchoredMatches = file.existingComments.filter((comment) => commentAnchorsRow(comment, row, side));
+      if (anchoredMatches.length > 0) {
+        anchored.set(`${side}:${row.key}`, anchoredMatches);
       }
     }
   }
 
-  return index;
+  return { covered, anchored };
 }
 
 function describeSelection(file: FileMaterial, selection: SelectionState): {
@@ -1443,7 +1455,7 @@ function rowIsSelected(
   return rowIndex >= lower && rowIndex <= upper && isSelectable(row, side);
 }
 
-function commentMatchesRow(
+function commentCoversRow(
   comment: ExistingInlineComment,
   row: DiffRow,
   side: ReviewCommentSide
@@ -1459,6 +1471,22 @@ function commentMatchesRow(
     return false;
   }
   return rowLine >= Math.min(startLine, endLine) && rowLine <= Math.max(startLine, endLine);
+}
+
+function commentAnchorsRow(
+  comment: ExistingInlineComment,
+  row: DiffRow,
+  side: ReviewCommentSide
+): boolean {
+  const commentSide = comment.side ?? "RIGHT";
+  if (commentSide !== side) {
+    return false;
+  }
+  const rowLine = side === "LEFT" ? row.oldLine : row.newLine;
+  if (!rowLine || !comment.line) {
+    return false;
+  }
+  return rowLine === comment.line;
 }
 
 function formatDraftRange(draft: { path: string; side: ReviewCommentSide; line: number; startLine: number | null }): string {

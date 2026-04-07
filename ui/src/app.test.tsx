@@ -120,6 +120,101 @@ function makeFileResponse(): FileResponse {
   };
 }
 
+function makeMultilineCommentFileResponse(): FileResponse {
+  return {
+    file: {
+      path: "src/app.ts",
+      previousPath: null,
+      status: "modified",
+      additions: 4,
+      deletions: 0,
+      baseRef: "abc1234",
+      headRef: "def5678",
+      patch: "@@ -7,0 +7,4 @@",
+      numberedPatch: "@@ -7,0 +7,4 @@",
+      baseContent: "old",
+      headContent: "new",
+      existingComments: [
+        {
+          id: 101,
+          author: "leonardliusc",
+          path: "src/app.ts",
+          body: "Should this be Optional[datetime] instead?",
+          createdAt: "2026-03-27T00:00:00.000Z",
+          line: 10,
+          side: "RIGHT",
+          startLine: 7,
+          startSide: "RIGHT",
+          replyToId: null
+        }
+      ],
+      diffRows: [
+        {
+          key: "h0-header",
+          hunkIndex: 0,
+          type: "hunk",
+          header: "@@ -7,0 +7,4 @@",
+          oldLine: null,
+          newLine: null,
+          leftText: "@@ -7,0 +7,4 @@",
+          rightText: "@@ -7,0 +7,4 @@",
+          leftSelectable: false,
+          rightSelectable: false
+        },
+        {
+          key: "h0-r0",
+          hunkIndex: 0,
+          type: "add",
+          header: null,
+          oldLine: null,
+          newLine: 7,
+          leftText: "",
+          rightText: "line 7",
+          leftSelectable: false,
+          rightSelectable: true
+        },
+        {
+          key: "h0-r1",
+          hunkIndex: 0,
+          type: "add",
+          header: null,
+          oldLine: null,
+          newLine: 8,
+          leftText: "",
+          rightText: "line 8",
+          leftSelectable: false,
+          rightSelectable: true
+        },
+        {
+          key: "h0-r2",
+          hunkIndex: 0,
+          type: "add",
+          header: null,
+          oldLine: null,
+          newLine: 9,
+          leftText: "",
+          rightText: "line 9",
+          leftSelectable: false,
+          rightSelectable: true
+        },
+        {
+          key: "h0-r3",
+          hunkIndex: 0,
+          type: "add",
+          header: null,
+          oldLine: null,
+          newLine: 10,
+          leftText: "",
+          rightText: "line 10",
+          leftSelectable: false,
+          rightSelectable: true
+        }
+      ]
+    },
+    drafts: []
+  };
+}
+
 function makeAnnotation(): AiReviewAnnotation {
   return {
     context: "Leave allocation API validation",
@@ -270,6 +365,38 @@ describe("ReviewWorkspace", () => {
     );
 
     expect(screen.getByText("AI 正在思考...")).toBeTruthy();
+  });
+
+  it("renders a multiline existing review comment only at its anchor line", () => {
+    render(
+      <ReviewWorkspace
+        session={makeSession()}
+        fileData={makeMultilineCommentFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.getAllByText("Should this be Optional[datetime] instead?")).toHaveLength(1);
   });
 
   it("does not submit the main chat while IME composition is active", async () => {
