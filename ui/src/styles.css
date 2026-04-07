@@ -514,7 +514,9 @@ button {
 
 .unified-code.selectable { cursor: pointer; }
 .unified-code.selected { background: var(--selected-bg); }
-.unified-code.commented { outline: 1px solid var(--commented-accent); }
+.unified-code.commented {
+  box-shadow: inset 3px 0 0 var(--commented-accent);
+}
 
 .diff-row-unified.added { background: var(--added-bg); }
 .diff-row-unified.deleted { background: var(--deleted-bg); }
