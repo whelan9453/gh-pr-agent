@@ -80,7 +80,7 @@ interface ReviewWorkspaceProps {
   onReviewBodyChange: (value: string) => void;
   onSaveDraft: (payload: DraftPayload) => Promise<void>;
   onDeleteDraft: (draftId: string) => Promise<void>;
-  onSubmitReview: (body: string) => Promise<void>;
+  onSubmitReview: (body: string, event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES") => Promise<void>;
   onRunAiReview: () => Promise<void>;
   onSendChatMessage: (message: string) => Promise<void>;
   onSendAnnotationMessage: (context: string, body: string, path: string | null, thread: Array<{ role: "user" | "assistant"; content: string }>, message: string) => Promise<string>;
@@ -348,14 +348,14 @@ export default function App(): JSX.Element {
     }
   }
 
-  async function handleSubmitReview(body: string): Promise<void> {
+  async function handleSubmitReview(body: string, event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES"): Promise<void> {
     if (!sessionId) {
       return;
     }
     try {
       setSubmittingReview(true);
       setError(null);
-      const result = await submitReview(sessionId, body);
+      const result = await submitReview(sessionId, body, event);
       setSuccessMessage(`Review posted: ${result.url}`);
       await refreshSession(sessionId);
       if (selectedPath) {
@@ -441,6 +441,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const [dragging, setDragging] = useState<SelectionState | null>(null);
   const [draftBody, setDraftBody] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reviewEvent, setReviewEvent] = useState<"COMMENT" | "APPROVE" | "REQUEST_CHANGES">("COMMENT");
   const [diffMode, setDiffMode] = useState<"split" | "unified">("split");
 
   const [leftWidth, setLeftWidth] = useState(280);
@@ -1017,6 +1018,18 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                   <li key={draft.id}>{formatDraftRange(draft)}</li>
                 ))}
               </ul>
+              <div className="confirm-event-select">
+                {(["COMMENT", "APPROVE", "REQUEST_CHANGES"] as const).map((ev) => (
+                  <button
+                    key={ev}
+                    type="button"
+                    className={reviewEvent === ev ? "event-option active" : "event-option"}
+                    onClick={() => setReviewEvent(ev)}
+                  >
+                    {ev === "COMMENT" ? "留言" : ev === "APPROVE" ? "Approve" : "Request Changes"}
+                  </button>
+                ))}
+              </div>
               <div className="confirm-actions">
                 <button type="button" className="ghost" onClick={() => setConfirmOpen(false)}>
                   取消
@@ -1025,7 +1038,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                   type="button"
                   onClick={() => {
                     setConfirmOpen(false);
-                    void props.onSubmitReview(props.reviewBody);
+                    void props.onSubmitReview(props.reviewBody, reviewEvent);
                   }}
                 >
                   確認送出

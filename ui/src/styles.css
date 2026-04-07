@@ -1331,6 +1331,37 @@ input[type="text"]:focus {
   background: #30363d;
 }
 
+.confirm-event-select {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.event-option {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: center;
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.event-option:hover {
+  background: var(--bg-subtle);
+}
+
+.event-option.active {
+  border-color: #388bfd;
+  background: rgba(56, 139, 253, 0.1);
+  color: #79c0ff;
+}
+
 .ghost {
   background: var(--bg-canvas) !important;
   color: var(--ink) !important;
