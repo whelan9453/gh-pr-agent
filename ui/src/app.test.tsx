@@ -554,4 +554,86 @@ describe("ReviewWorkspace", () => {
     );
     expect(textarea.value).toBe("");
   });
+
+  it("allows submitting an empty approve review", async () => {
+    const user = userEvent.setup();
+    const onSubmitReview = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ReviewWorkspace
+        session={makeSession()}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={onSubmitReview}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "送出 Review" }));
+    const confirmButton = screen.getByRole("button", { name: "確認送出" }) as HTMLButtonElement;
+
+    expect(confirmButton.disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(confirmButton.disabled).toBe(false);
+
+    await user.click(confirmButton);
+    expect(onSubmitReview).toHaveBeenCalledWith("", "APPROVE");
+  });
+
+  it("keeps empty comment and request changes disabled", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ReviewWorkspace
+        session={makeSession()}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={vi.fn()}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "送出 Review" }));
+    const confirmButton = screen.getByRole("button", { name: "確認送出" }) as HTMLButtonElement;
+
+    expect(confirmButton.disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Request Changes" }));
+    expect(confirmButton.disabled).toBe(true);
+  });
 });

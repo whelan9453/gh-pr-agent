@@ -601,6 +601,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const file = props.fileData?.file ?? null;
   const fileDrafts = props.fileData?.drafts ?? [];   // current file only — for inline diff display
   const allDrafts = props.session.drafts;             // all files — for sidebar + confirm sheet
+  const canSubmitReview = reviewEvent === "APPROVE" || allDrafts.length > 0 || !!props.reviewBody.trim();
   const selectionSummary = file && selection ? describeSelection(file, selection) : null;
 
   const commentIndex = useMemo(() => buildCommentIndex(file), [file]);
@@ -918,25 +919,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
               <option value="codex-cli">Codex CLI</option>
               <option value="foundry">Azure Foundry</option>
             </select>
-            {props.backendSettings.backend === "claude-cli" && (
-              <input
-                type="text"
-                value={props.backendSettings.claudeCliModel}
-                disabled={props.runningAiReview}
-                onChange={(e) => props.onBackendSettingsChange({ claudeCliModel: e.target.value })}
-                style={{ fontSize: "0.75rem", padding: "2px 4px", width: "160px" }}
-              />
-            )}
-            {props.backendSettings.backend === "codex-cli" && (
-              <input
-                type="text"
-                value={props.backendSettings.codexCliModel}
-                placeholder="default model"
-                disabled={props.runningAiReview}
-                onChange={(e) => props.onBackendSettingsChange({ codexCliModel: e.target.value })}
-                style={{ fontSize: "0.75rem", padding: "2px 4px", width: "160px" }}
-              />
-            )}
           </div>
           <button
             type="button"
@@ -1002,7 +984,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             />
             <button
               type="button"
-              disabled={props.submittingReview || (allDrafts.length === 0 && !props.reviewBody.trim())}
+              disabled={props.submittingReview}
               onClick={() => setConfirmOpen(true)}
             >
               {props.submittingReview ? "送出中..." : "送出 Review"}
@@ -1039,7 +1021,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
                 </button>
                 <button
                   type="button"
+                  disabled={!canSubmitReview}
                   onClick={() => {
+                    if (!canSubmitReview) return;
                     setConfirmOpen(false);
                     void props.onSubmitReview(props.reviewBody, reviewEvent);
                   }}
