@@ -1359,9 +1359,11 @@ input[type="text"]:focus {
 }
 
 .event-option.active {
-  border-color: #388bfd;
-  background: rgba(56, 139, 253, 0.1);
-  color: #79c0ff;
+  border-color: #58a6ff;
+  background: rgba(56, 139, 253, 0.25);
+  color: #cae8ff;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px #388bfd inset;
 }
 
 .ghost {

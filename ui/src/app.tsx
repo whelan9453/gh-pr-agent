@@ -398,7 +398,7 @@ export default function App(): JSX.Element {
       {error ? <section className="banner error">{error}</section> : null}
       {successMessage ? <section className="banner success">{successMessage}</section> : null}
 
-      {loadingSession ? <section className="empty-panel">正在載入 session...</section> : null}
+      {loadingSession && !session ? <section className="empty-panel">正在載入 session...</section> : null}
 
       {session ? (
         <ReviewWorkspace
@@ -722,8 +722,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
         onMouseDown={(e) => startResize("left", e)}
       />
       <section className="diff-panel">
-        {props.loadingFile ? <div className="diff-empty">正在載入 diff...</div> : null}
-        {!props.loadingFile && file ? (
+        {props.loadingFile && !file ? <div className="diff-empty">正在載入 diff...</div> : null}
+        {file ? (
           <>
             <header className="diff-header">
               <div>
