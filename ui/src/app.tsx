@@ -460,7 +460,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const [draftBody, setDraftBody] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reviewEvent, setReviewEvent] = useState<"COMMENT" | "APPROVE" | "REQUEST_CHANGES">("COMMENT");
-  const [diffMode, setDiffMode] = useState<"split" | "unified">("split");
+  const [diffMode, setDiffMode] = useState<"split" | "unified">("unified");
 
   const [leftWidth, setLeftWidth] = useState(280);
   const [rightWidth, setRightWidth] = useState(360);
