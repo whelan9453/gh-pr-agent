@@ -113,6 +113,7 @@ export default function App(): JSX.Element {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const bootstrapped = useRef(false);
   const pendingModelUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiReviewAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void getSettings().then(setBackendSettings).catch(() => {});
@@ -170,6 +171,12 @@ export default function App(): JSX.Element {
     try {
       setCreatingSession(true);
       setError(null);
+      setSuccessMessage(null);
+      setFileData(null);
+      setAiReviewStatus("");
+      aiReviewAbortRef.current?.abort();
+      aiReviewAbortRef.current = null;
+      setRunningAiReview(false);
       const nextSessionId = await createSession(prUrl);
       window.history.replaceState({}, "", `/?session=${encodeURIComponent(nextSessionId)}`);
       setSessionId(nextSessionId);
@@ -258,22 +265,28 @@ export default function App(): JSX.Element {
 
   async function handleRunAiReview(): Promise<void> {
     if (!sessionId) return;
+    const ac = new AbortController();
+    aiReviewAbortRef.current = ac;
+    const capturedSessionId = sessionId;
     try {
       setRunningAiReview(true);
       setAiReviewStatus("");
       setError(null);
-      const result = await runAiReview(sessionId, setAiReviewStatus);
-      await refreshSession(sessionId);
+      const result = await runAiReview(capturedSessionId, setAiReviewStatus, ac.signal);
+      if (ac.signal.aborted) return;
+      await refreshSession(capturedSessionId);
       // refreshSession overwrites chatMessages from server (no annotations), so re-attach them now
       setChatMessages((prev) => {
         const lastIdx = prev.length - 1;
         if (lastIdx < 0 || prev[lastIdx]?.role !== "assistant") return prev;
         return prev.map((m, i) => i === lastIdx ? { ...m, annotations: result.comments } : m);
       });
-      if (selectedPath) await refreshFile(sessionId, selectedPath);
+      if (selectedPath) await refreshFile(capturedSessionId, selectedPath);
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setError(error instanceof Error ? error.message : "Unable to run AI review.");
     } finally {
+      if (aiReviewAbortRef.current === ac) aiReviewAbortRef.current = null;
       setRunningAiReview(false);
       setAiReviewStatus("");
     }

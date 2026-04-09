@@ -73,14 +73,17 @@ export function submitReview(
 
 export function runAiReview(
   sessionId: string,
-  onProgress: (message: string) => void
+  onProgress: (message: string) => void,
+  signal?: AbortSignal
 ): Promise<{ analysis: string; draftCount: number; comments: AiReviewAnnotation[] }> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
     void (async () => {
       let response: Response;
       try {
         response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/ai-review`, {
-          method: "POST"
+          method: "POST",
+          signal
         });
       } catch (err) {
         reject(err instanceof Error ? err : new Error("Network error"));
