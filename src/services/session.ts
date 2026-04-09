@@ -126,7 +126,7 @@ export interface SessionOverview {
   prContext: PrContext;
   reviewSummary: string;
   drafts: DraftComment[];
-  chatMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  chatMessages: Array<{ role: "user" | "assistant"; content: string; annotations?: Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> }>;
   files: Array<{
     path: string;
     previousPath: string | null;
@@ -219,10 +219,14 @@ export function getSessionOverview(sessionId: string): SessionOverview {
   const artifacts = loadArtifacts(sessionId);
   const chatHistory = artifacts.chatHistory ?? [];
   // Skip index 0 (the large PR diff context message sent to Claude) — only expose display messages
-  const chatMessages = chatHistory.slice(1).map((m) => ({
-    role: m.role,
-    content: stripJsonFence(m.content)
-  }));
+  const chatMessages = chatHistory.slice(1).map((m) => {
+    const content = stripJsonFence(m.content);
+    if (m.role === "assistant") {
+      const annotations = extractAnnotations(m.content);
+      return annotations.length > 0 ? { role: m.role, content, annotations } : { role: m.role, content };
+    }
+    return { role: m.role, content };
+  });
   return {
     session,
     prInfo: artifacts.prInfo,
@@ -410,6 +414,31 @@ function normalizeDraftComment(
     createdAt: existingDraft?.createdAt ?? now,
     updatedAt: now
   };
+}
+
+function extractAnnotations(raw: string): Array<{ context: string; severity: "must-fix" | "should-fix"; description: string; body: string; path: string | null; line: number | null; alreadyTracked?: boolean }> {
+  const match = /```json\s*([\s\S]*?)```\s*$/.exec(raw);
+  if (!match) return [];
+  try {
+    const parsed = JSON.parse(match[1] ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((c) => {
+      if (typeof c !== "object" || c === null) return [];
+      const r = c as Record<string, unknown>;
+      if (typeof r["context"] !== "string" || typeof r["body"] !== "string") return [];
+      return [{
+        context: r["context"],
+        severity: r["severity"] === "should-fix" ? "should-fix" as const : "must-fix" as const,
+        description: typeof r["description"] === "string" ? r["description"] : "",
+        body: r["body"],
+        path: typeof r["path"] === "string" ? r["path"] : null,
+        line: typeof r["line"] === "number" ? r["line"] : null,
+        ...(r["alreadyTracked"] === true ? { alreadyTracked: true } : {})
+      }];
+    });
+  } catch {
+    return [];
+  }
 }
 
 function stripJsonFence(text: string): string {

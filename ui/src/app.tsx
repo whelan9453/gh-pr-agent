@@ -197,13 +197,7 @@ export default function App(): JSX.Element {
         setSessionId(nextSessionId);
         setSession(payload);
         setReviewBody(payload.reviewSummary);
-        // Preserve annotations from current state — server doesn't store them
-        setChatMessages((current) => {
-          const next = payload.chatMessages ?? [];
-          return next.map((msg, i) =>
-            current[i]?.annotations ? { ...msg, annotations: current[i].annotations } : msg
-          );
-        });
+        setChatMessages(payload.chatMessages ?? []);
         setSelectedPath((current) => {
           if (current && payload.files.some((file) => file.path === current) && !resetSelection) {
             return current;
@@ -335,6 +329,16 @@ export default function App(): JSX.Element {
         (r) => r.type !== "hunk" && r.leftSelectable && r.oldLine === annotation.line
       );
       side = "LEFT";
+    }
+    if (!row) {
+      // Fall back to nearest right-selectable line (LLM may return a line slightly outside the hunk)
+      const candidates = data.file.diffRows.filter((r) => r.type !== "hunk" && r.rightSelectable && r.newLine != null);
+      if (candidates.length > 0) {
+        row = candidates.reduce((best, r) =>
+          Math.abs((r.newLine ?? 0) - annotation.line!) < Math.abs((best.newLine ?? 0) - annotation.line!) ? r : best
+        );
+        side = "RIGHT";
+      }
     }
     if (!row) throw new Error(`無法在 diff 中找到第 ${annotation.line} 行`);
     await saveDraft(sessionId, { path: annotation.path, body, side, startRowKey: row.key, endRowKey: row.key });
