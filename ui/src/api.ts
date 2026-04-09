@@ -77,7 +77,6 @@ export function runAiReview(
   signal?: AbortSignal
 ): Promise<{ analysis: string; draftCount: number; comments: AiReviewAnnotation[] }> {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
     void (async () => {
       let response: Response;
       try {
