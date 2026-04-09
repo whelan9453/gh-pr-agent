@@ -48,7 +48,7 @@ interface AnnotationCardState {
   sending: boolean;
   addingDraft: boolean;
   draftError: string | null;
-  draftSuccess: boolean;
+  actionSuccess: "draft" | "summary" | null;
 }
 
 interface AnnotationHandlers {
@@ -59,6 +59,7 @@ interface AnnotationHandlers {
 
   onCommentChange: (key: string, defaultBody: string, body: string) => void;
   onAddDraft: (key: string, annotation: AiReviewAnnotation, commentBody: string) => Promise<void>;
+  onAppendToReview: (key: string, defaultBody: string, commentBody: string) => void;
 }
 
 interface ReviewWorkspaceProps {
@@ -477,7 +478,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
   const [annotationStates, setAnnotationStates] = useState<Map<string, AnnotationCardState>>(new Map());
 
   function defaultAnnotationState(defaultBody: string): AnnotationCardState {
-    return { expanded: false, thread: [], commentBody: defaultBody, sending: false, addingDraft: false, draftError: null, draftSuccess: false };
+    return { expanded: false, thread: [], commentBody: defaultBody, sending: false, addingDraft: false, draftError: null, actionSuccess: null };
   }
 
   function getAnnotationState(key: string, defaultBody: string): AnnotationCardState {
@@ -518,19 +519,26 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
       }
     },
     onCommentChange(key, defaultBody, body) {
-      patchAnnotation(key, defaultBody, { commentBody: body });
+      patchAnnotation(key, defaultBody, { commentBody: body, draftError: null, actionSuccess: null });
     },
     async onAddDraft(key, annotation, commentBody) {
-      patchAnnotation(key, annotation.body, { addingDraft: true, draftError: null, draftSuccess: false });
+      patchAnnotation(key, annotation.body, { addingDraft: true, draftError: null, actionSuccess: null });
       try {
         await props.onAddAnnotationDraft(annotation, commentBody);
-        patchAnnotation(key, annotation.body, { addingDraft: false, draftSuccess: true });
+        patchAnnotation(key, annotation.body, { addingDraft: false, actionSuccess: "draft" });
       } catch (e) {
         patchAnnotation(key, annotation.body, {
           addingDraft: false,
           draftError: e instanceof Error ? e.message : "新增留言失敗"
         });
       }
+    },
+    onAppendToReview(key, defaultBody, commentBody) {
+      const next = props.reviewBody.trim()
+        ? `${props.reviewBody.trim()}\n\n${commentBody.trim()}`
+        : commentBody.trim();
+      props.onReviewBodyChange(next);
+      patchAnnotation(key, defaultBody, { draftError: null, actionSuccess: "summary" });
     }
   };
 
@@ -1202,7 +1210,7 @@ function AnnotationCard({
   const [chatInput, setChatInput] = useState("");
   const [isComposing, setIsComposing] = useState(false);
   const isComposingRef = useRef(false);
-  const hasLocation = annotation.path != null;
+  const hasAnchor = annotation.path != null && annotation.line != null;
   const severityLabel = annotation.severity === "must-fix" ? "必須修正" : "建議改善";
 
   async function handleSendChat(e?: React.FormEvent): Promise<void> {
@@ -1230,7 +1238,7 @@ function AnnotationCard({
         <p className="annotation-card-desc">{annotation.description}</p>
       ) : null}
       <div className="annotation-card-actions">
-        {hasLocation ? (
+        {hasAnchor ? (
           <button
             type="button"
             className="annotation-jump-btn"
@@ -1289,22 +1297,39 @@ function AnnotationCard({
 
           <div className="annotation-draft-section">
             <p className="annotation-draft-label">留言草稿</p>
+            {!hasAnchor ? (
+              <p className="meta-line">這則建議沒有對應到 diff 行號，不能直接建立 inline comment。</p>
+            ) : null}
             <textarea
               value={state.commentBody}
               onChange={(e) => handlers.onCommentChange(cardKey, annotation.body, e.target.value)}
               placeholder="留言內容..."
               rows={3}
             />
-            <button
-              type="button"
-              className="annotation-add-draft-btn"
-              disabled={!hasLocation || !state.commentBody.trim() || state.addingDraft}
-              onClick={() => void handlers.onAddDraft(cardKey, annotation, state.commentBody)}
-            >
-              {state.addingDraft ? "新增中..." : "新增留言"}
-            </button>
-            {state.draftSuccess ? (
+            {hasAnchor ? (
+              <button
+                type="button"
+                className="annotation-add-draft-btn"
+                disabled={!state.commentBody.trim() || state.addingDraft}
+                onClick={() => void handlers.onAddDraft(cardKey, annotation, state.commentBody)}
+              >
+                {state.addingDraft ? "新增中..." : "新增留言"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="annotation-add-draft-btn"
+                disabled={!state.commentBody.trim()}
+                onClick={() => handlers.onAppendToReview(cardKey, annotation.body, state.commentBody)}
+              >
+                加入 Review 總結
+              </button>
+            )}
+            {state.actionSuccess === "draft" ? (
               <p className="annotation-draft-feedback success">已新增留言，可在「待送出留言」查看</p>
+            ) : null}
+            {state.actionSuccess === "summary" ? (
+              <p className="annotation-draft-feedback success">已加入 Review summary，可直接送出 review</p>
             ) : null}
             {state.draftError ? (
               <p className="annotation-draft-feedback error">{state.draftError}</p>

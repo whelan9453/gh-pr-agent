@@ -80,10 +80,10 @@ export function runAiReview(
     void (async () => {
       let response: Response;
       try {
-        response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/ai-review`, {
-          method: "POST",
-          signal
-        });
+        response = await fetch(
+          `/api/sessions/${encodeURIComponent(sessionId)}/ai-review`,
+          signal ? { method: "POST", signal } : { method: "POST" }
+        );
       } catch (err) {
         reject(err instanceof Error ? err : new Error("Network error"));
         return;
