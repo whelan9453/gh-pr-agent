@@ -226,6 +226,17 @@ function makeAnnotation(): AiReviewAnnotation {
   };
 }
 
+function makeUnanchoredAnnotation(): AiReviewAnnotation {
+  return {
+    context: "Unexpected subnet drift",
+    severity: "must-fix",
+    description: "這個問題沒有對應到單一 diff 行，不能直接下 inline comment。",
+    body: "The automated plan includes real subnet behavior changes. Please reconcile or remove this drift before merge.",
+    path: null,
+    line: null
+  };
+}
+
 describe("ReviewWorkspace", () => {
   it("creates a draft from a selected diff range", async () => {
     const user = userEvent.setup();
@@ -553,6 +564,54 @@ describe("ReviewWorkspace", () => {
       "你上次不一起講"
     );
     expect(textarea.value).toBe("");
+  });
+
+  it("falls back to review summary when an annotation has no diff anchor", async () => {
+    const user = userEvent.setup();
+    const onReviewBodyChange = vi.fn();
+    const onAddAnnotationDraft = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ReviewWorkspace
+        session={{
+          ...makeSession(),
+          chatMessages: [{ role: "assistant", content: "Review result", annotations: [makeUnanchoredAnnotation()] }]
+        }}
+        fileData={makeFileResponse()}
+        selectedPath="src/app.ts"
+        loadingFile={false}
+        savingDraft={false}
+        submittingReview={false}
+        runningAiReview={false}
+        aiReviewStatus=""
+        backendSettings={{ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }}
+        onBackendSettingsChange={vi.fn()}
+        sendingChat={false}
+        chatMessages={[{ role: "assistant", content: "Review result", annotations: [makeUnanchoredAnnotation()] }]}
+        reviewBody=""
+        successMessage={null}
+        onSelectPath={vi.fn()}
+        onReviewBodyChange={onReviewBodyChange}
+        onSaveDraft={vi.fn().mockResolvedValue(undefined)}
+        onDeleteDraft={vi.fn().mockResolvedValue(undefined)}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onRunAiReview={vi.fn().mockResolvedValue(undefined)}
+        onSendChatMessage={vi.fn().mockResolvedValue(undefined)}
+        onSendAnnotationMessage={vi.fn().mockResolvedValue("")}
+        onAddAnnotationDraft={onAddAnnotationDraft}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "▼ 討論 / 新增留言" }));
+    expect(screen.getByText("這則建議沒有對應到 diff 行號，不能直接建立 inline comment。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Unexpected subnet drift →" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "加入 Review 總結" }));
+    expect(onReviewBodyChange).toHaveBeenCalledWith(
+      "The automated plan includes real subnet behavior changes. Please reconcile or remove this drift before merge."
+    );
+    expect(onAddAnnotationDraft).not.toHaveBeenCalled();
+    expect(screen.getByText("已加入 Review summary，可直接送出 review")).toBeTruthy();
   });
 
   it("allows submitting an empty approve review", async () => {
