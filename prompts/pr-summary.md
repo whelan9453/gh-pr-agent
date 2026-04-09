@@ -63,7 +63,7 @@ If the original role is uncertain, infer conservatively from the diff.
 
 ### 必須修正（Must Fix）
 
-Issues that would cause bugs, regressions, security problems, or data loss if merged as-is. For each:
+Issues that would cause bugs, regressions, security problems, or data loss if merged as-is. Report ALL issues you find — do not cap at any number. For each:
 - File and line reference if applicable
 - What the problem is and why it matters
 
@@ -73,7 +73,7 @@ If there are none, say "無".
 
 ### 建議改善（Should Fix）
 
-Non-blocking but important: missing error handling, unclear logic, test gaps, naming issues. Keep this list short — 3 items max.
+Non-blocking but important: missing error handling, unclear logic, test gaps, naming issues. Report ALL issues you find — do not cap at any number.
 
 Same rule: include tracked issues, but note "(已有 open thread 追蹤中)" where applicable.
 
@@ -105,3 +105,4 @@ After the 結論, output a single fenced JSON block — no heading, no label, ju
 - If a file has no issues, skip it in 必須修正 and 建議改善 — do not narrate every file.
 - Ground every finding in the actual diff. Do not speculate about code you cannot see.
 - Respond entirely in Traditional Chinese (繁體中文). Every section heading and all prose must be in Chinese. The only English allowed is inside the JSON block values.
+- Scan systematically for: null/undefined dereferences, unchecked error returns, missing await, type mismatches, off-by-one errors, race conditions, missing auth/input validation, injection risks, secrets or hardcoded config values, missing tests for changed logic, API contract changes without version bump.

@@ -28,6 +28,8 @@ If you find no issues in this batch, output `[]`.
 
 ## Rules
 
+- Report ALL issues you find — do not cap at any number.
 - Ground every finding in the actual diff shown. Do not speculate about code outside this batch.
 - Do not narrate files that have no issues.
 - Do not output prose, headings, or analysis — only the JSON block.
+- Scan systematically for: null/undefined dereferences, unchecked error returns, missing await, type mismatches, off-by-one errors, race conditions, missing auth/input validation, injection risks, secrets or hardcoded config values, missing tests for changed logic, API contract changes without version bump.

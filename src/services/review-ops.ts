@@ -150,7 +150,7 @@ export async function runAiReview(
     const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
     onProgress?.(`${backendLabel} 仍在執行，已等待 ${formatElapsed(elapsedSeconds)}...`);
   }, 15_000);
-  const raw = await client.send(systemPrompt, messages, 8192, signal)
+  const raw = await client.send(systemPrompt, messages, 16384, signal)
     .finally(() => {
       clearInterval(heartbeat);
     });
@@ -216,7 +216,7 @@ async function runBatchedAiReview(
     const raw = await client.send(
       batchSystemPrompt,
       [{ role: "user", content: batchMessage }],
-      4096,
+      8192,
       signal
     );
     const comments = parseJsonCommentBlock(raw);
@@ -247,7 +247,7 @@ async function runBatchedAiReview(
   const synthesizeRaw = await client.send(
     synthesizeSystemPrompt,
     [{ role: "user", content: synthesizeMessage }],
-    8192,
+    16384,
     signal
   ).finally(() => {
     clearInterval(heartbeat);

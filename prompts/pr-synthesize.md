@@ -77,7 +77,7 @@ Infer from file paths and finding descriptions. If uncertain, infer conservative
 
 ### 必須修正（Must Fix）
 
-Issues from the batch findings with `severity: "must-fix"`. For each:
+Issues from the batch findings with `severity: "must-fix"`. Report ALL of them — do not cap at any number. For each:
 - File and line reference if applicable
 - What the problem is and why it matters
 
@@ -89,7 +89,7 @@ If there are none, say "無".
 
 ### 建議改善（Should Fix）
 
-Issues from the batch findings with `severity: "should-fix"`. Keep this list short — 3 items max.
+Issues from the batch findings with `severity: "should-fix"`. Report ALL of them — do not cap at any number.
 
 Same deduplication and tracking rules as above.
 
@@ -116,7 +116,7 @@ After the 結論, output a single fenced JSON block — no heading, no label, ju
 
 ## Rules
 
-- Base all findings on the batch findings provided. Do not invent new issues.
+- Base findings primarily on the per-batch results. You may also note cross-file issues clearly visible from the combination of batch findings (e.g. inconsistent patterns across files, missing counterpart changes).
 - Deduplicate findings that refer to the same underlying problem across batches.
 - Be direct and specific. No filler.
 - Do not include a "Comment to author" block in the prose — those go only in the JSON.
