@@ -266,6 +266,32 @@ async function runBatchedAiReview(
   return { analysis, draftCount: 0, comments };
 }
 
+// ~50k tokens at 4 chars/token — leaves room for system prompt and 3000-token output reserve
+const MAX_CHAT_INPUT_CHARS = 200_000;
+
+function trimChatHistory(
+  history: ConversationMessage[],
+  maxChars: number
+): ConversationMessage[] {
+  if (history.length === 0) return history;
+
+  const anchor = history[0]!; // PR context — always keep
+  const rest = history.slice(1);
+
+  let used = anchor.content.length;
+  const kept: ConversationMessage[] = [];
+
+  // Walk newest → oldest, keep what fits within budget
+  for (let i = rest.length - 1; i >= 0; i--) {
+    const msg = rest[i]!;
+    if (used + msg.content.length > maxChars) break;
+    used += msg.content.length;
+    kept.unshift(msg);
+  }
+
+  return [anchor, ...kept];
+}
+
 export async function sendChatMessage(
   sessionId: string,
   message: string,
@@ -279,7 +305,8 @@ export async function sendChatMessage(
     const session = loadSession(sessionId);
     history = [{ role: "user", content: buildAiReviewMessage(session, artifacts) }];
   }
-  const messages: ConversationMessage[] = [...history, { role: "user", content: message }];
+  const trimmed = trimChatHistory(history, MAX_CHAT_INPUT_CHARS);
+  const messages: ConversationMessage[] = [...trimmed, { role: "user", content: message }];
   const reply = await client.send(systemPrompt, messages, 3000);
 
   artifacts.chatHistory = [...messages, { role: "assistant", content: reply }];
