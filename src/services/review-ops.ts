@@ -272,7 +272,7 @@ export async function sendChatMessage(
   client: ConversationClient
 ): Promise<{ reply: string }> {
   const artifacts = loadArtifacts(sessionId);
-  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-summary.md"));
+  const systemPrompt = await loadPrompt(join(MODULE_DIR, "..", "..", "prompts", "pr-chat.md"));
 
   const history: ConversationMessage[] = artifacts.chatHistory ?? [];
   const messages: ConversationMessage[] = [...history, { role: "user", content: message }];
