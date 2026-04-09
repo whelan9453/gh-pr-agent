@@ -59,6 +59,8 @@ Session data is stored under `.gh-pr-agent/sessions/` and pruned automatically (
 |---|---|
 | `--model <preset>` | `haiku` (default) or `sonnet` |
 | `--claude-model <model-id>` | Claude model ID when using Claude CLI (default: `claude-sonnet-4-6`) |
+| `--use-codex` | Use Codex CLI instead of Claude CLI (`summary` command only) |
+| `--codex-model <model-id>` | Codex model ID when using `--use-codex` |
 | `--use-foundry` | Use Azure Foundry instead of local CLI |
 | `--prompt-file <path>` | Custom prompt file (walkthrough only) |
 | `--prompt-for-github-token` | Prompt for GitHub token if env var is unset |

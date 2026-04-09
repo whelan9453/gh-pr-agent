@@ -33,6 +33,7 @@ export interface InteractiveOptions {
   deploymentName: string;
   backend?: ClientBackend;
   claudeCliModel?: string;
+  codexCliModel?: string;
   promptFile?: string;
   verbose?: boolean;
 }

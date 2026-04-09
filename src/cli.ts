@@ -86,6 +86,8 @@ async function resolveInteractiveOptions(options: {
   promptForAzureKey?: boolean;
   useFoundry?: boolean;
   claudeModel?: string;
+  useCodex?: boolean;
+  codexModel?: string;
 }): Promise<InteractiveOptions> {
   const model = parseModelPreset(options.model);
 
@@ -115,6 +117,20 @@ async function resolveInteractiveOptions(options: {
       result.promptFile = path.resolve(options.promptFile);
     }
     return result;
+  }
+
+  if (options.useCodex) {
+    return {
+      model,
+      githubToken,
+      azureFoundryBaseUrl: "",
+      azureFoundryApiKey: "",
+      deploymentName: "",
+      backend: "codex-cli" as const,
+      ...(options.codexModel !== undefined ? { codexCliModel: options.codexModel } : {}),
+      verbose: Boolean(options.verbose),
+      ...(options.promptFile ? { promptFile: path.resolve(options.promptFile) } : {})
+    };
   }
 
   return {
@@ -228,6 +244,8 @@ function buildProgram(): Command {
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
     .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
+    .option("--use-codex", "Use Codex CLI instead of Claude CLI")
+    .option("--codex-model <model-id>", "Codex model ID")
     .action(async (prUrl: string, options) => {
       const interactiveOpts = await resolveInteractiveOptions(options);
       await summarizePr(prUrl, interactiveOpts);

@@ -152,7 +152,8 @@ export async function summarizePr(prUrl: string, opts: InteractiveOptions): Prom
     azureFoundryBaseUrl: opts.azureFoundryBaseUrl,
     azureFoundryApiKey: opts.azureFoundryApiKey,
     deploymentName: opts.deploymentName,
-    ...(opts.claudeCliModel !== undefined ? { claudeCliModel: opts.claudeCliModel } : {})
+    ...(opts.claudeCliModel !== undefined ? { claudeCliModel: opts.claudeCliModel } : {}),
+    ...(opts.codexCliModel !== undefined ? { codexCliModel: opts.codexCliModel } : {})
   });
 
   const messages: ConversationMessage[] = [{ role: "user", content: userMessage }];
