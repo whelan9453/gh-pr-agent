@@ -26,7 +26,7 @@ function getBackendLabel(backend: BackendSettings["backend"]): string {
 
 export function createDefaultUiServerService(config: AppConfig): UiServerService {
   let settings: BackendSettings = {
-    backend: config.backend ?? "codex-cli",
+    backend: config.backend ?? "opencode-cli",
     claudeCliModel: config.claudeCliModel ?? "claude-sonnet-4-6",
     codexCliModel: config.codexCliModel ?? "",
     opencodeCliModel: config.opencodeCliModel ?? "github-copilot/claude-sonnet-4.6"

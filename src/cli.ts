@@ -217,7 +217,7 @@ function buildProgram(): Command {
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
     .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
-    .option("--use-opencode", "Use OpenCode CLI instead of Claude CLI")
+    .option("--use-opencode", "Use OpenCode CLI")
     .option("--opencode-model <model-id>", "OpenCode model ID (default: github-copilot/claude-sonnet-4.6)")
     .action(async (prUrl: string | undefined, options) => {
       if (!prUrl) {
@@ -237,7 +237,7 @@ function buildProgram(): Command {
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
     .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
-    .option("--use-opencode", "Use OpenCode CLI instead of Claude CLI")
+    .option("--use-opencode", "Use OpenCode CLI")
     .option("--opencode-model <model-id>", "OpenCode model ID (default: github-copilot/claude-sonnet-4.6)")
     .action(async (sessionId: string, options) => {
       const session = loadSession(sessionId);
@@ -259,7 +259,7 @@ function buildProgram(): Command {
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
     .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
-    .option("--use-opencode", "Use OpenCode CLI instead of Codex CLI")
+    .option("--use-opencode", "Use OpenCode CLI")
     .option("--opencode-model <model-id>", "OpenCode model ID (default: github-copilot/claude-sonnet-4.6)")
     .action(async (prUrl: string | undefined, options) => {
       const config = await resolveUiOptions(options);
@@ -282,7 +282,7 @@ function buildProgram(): Command {
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .option("--use-codex", "Use Codex CLI instead of Claude CLI")
     .option("--codex-model <model-id>", "Codex model ID")
-    .option("--use-opencode", "Use OpenCode CLI instead of Claude CLI")
+    .option("--use-opencode", "Use OpenCode CLI")
     .option("--opencode-model <model-id>", "OpenCode model ID (default: github-copilot/claude-sonnet-4.6)")
     .action(async (prUrl: string, options) => {
       const interactiveOpts = await resolveInteractiveOptions(options);

@@ -6,7 +6,7 @@ A local CLI and web UI for reviewing GitHub pull requests with AI. Supports Code
 
 - Node.js 22 LTS or 24 LTS
 - A GitHub PAT with `Contents: Read` and `Pull Requests: Read` (add `Write` if you plan to post comments) access to the target repository
-- At least one AI backend: [Codex CLI](https://github.com/openai/codex) (default), [Claude CLI](https://github.com/anthropics/claude-code), [OpenCode CLI](https://opencode.ai/) with GitHub Copilot, or Azure Foundry. *(If using a CLI backend, ensure it is installed and authenticated in your terminal first).*
+- At least one AI backend: [OpenCode CLI](https://opencode.ai/) with GitHub Copilot (default), [Codex CLI](https://github.com/openai/codex), [Claude CLI](https://github.com/anthropics/claude-code), or Azure Foundry. *(If using a CLI backend, ensure it is installed and authenticated in your terminal first).*
 
 ## Setup
 
@@ -68,7 +68,7 @@ Session data is stored under `.gh-pr-agent/sessions/` and pruned automatically (
 | `--claude-model <model-id>` | Claude model ID when using Claude CLI (default: `claude-sonnet-4-6`) |
 | `--use-codex` | Use Codex CLI instead of Claude CLI (`summary` command only) |
 | `--codex-model <model-id>` | Codex model ID when using `--use-codex` |
-| `--use-opencode` | Use OpenCode CLI instead of Claude CLI |
+| `--use-opencode` | Use OpenCode CLI |
 | `--opencode-model <model-id>` | OpenCode model ID when using `--use-opencode` (default: `github-copilot/claude-sonnet-4.6`) |
 | `--use-foundry` | Use Azure Foundry instead of local CLI |
 | `--prompt-file <path>` | Custom prompt file (walkthrough only) |

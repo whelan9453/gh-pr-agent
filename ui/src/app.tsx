@@ -104,7 +104,7 @@ export default function App(): JSX.Element {
   const [runningAiReview, setRunningAiReview] = useState(false);
   const [aiReviewStatus, setAiReviewStatus] = useState("");
   const [backendSettings, setBackendSettings] = useState<BackendSettings>({
-    backend: "codex-cli",
+    backend: "opencode-cli",
     claudeCliModel: "claude-sonnet-4-6",
     codexCliModel: "",
     opencodeCliModel: "github-copilot/claude-sonnet-4.6"
