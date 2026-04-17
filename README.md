@@ -172,7 +172,7 @@ npm run typecheck # type-check src and UI
 npm run build     # build CLI and UI
 ```
 
-For dev UI with OpenCode:
+For dev UI with OpenCode. `USE_OPENCODE=1` forces OpenCode even when Azure env vars are also configured:
 
 ```bash
 USE_OPENCODE=1 OPENCODE_MODEL=github-copilot/claude-sonnet-4.6 npm run dev

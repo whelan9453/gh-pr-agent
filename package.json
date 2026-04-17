@@ -2,7 +2,7 @@
   "name": "gh-pr-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "Review GitHub pull requests with Claude on Azure Foundry.",
+  "description": "Review GitHub pull requests with local AI backends.",
   "type": "module",
   "bin": {
     "gh-pr-review": "./dist/src/cli.js"

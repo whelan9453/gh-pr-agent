@@ -186,19 +186,15 @@ async function resolveUiOptions(options: {
     return resolveConfig({ model, githubToken, azureFoundryApiKey });
   }
 
-  if (options.useOpencode) {
-    return {
-      githubToken,
-      azureFoundryBaseUrl: "",
-      azureFoundryApiKey: "",
-      selectedModel: model,
-      deploymentName: "",
-      backend: "opencode-cli",
-      ...(options.opencodeModel !== undefined ? { opencodeCliModel: options.opencodeModel } : {})
-    };
-  }
-
-  return buildClaudeCliConfig(githubToken, model, options.claudeModel);
+  return {
+    githubToken,
+    azureFoundryBaseUrl: "",
+    azureFoundryApiKey: "",
+    selectedModel: model,
+    deploymentName: "",
+    backend: "opencode-cli",
+    ...(options.opencodeModel !== undefined ? { opencodeCliModel: options.opencodeModel } : {})
+  };
 }
 
 function buildProgram(): Command {
@@ -206,7 +202,7 @@ function buildProgram(): Command {
 
   program
     .name("gh-pr-review")
-    .description("Walk through a GitHub pull request with Claude");
+    .description("Review GitHub pull requests with AI");
 
   // ── Default: interactive walkthrough mode ───────────────────────────────
   program
@@ -215,10 +211,11 @@ function buildProgram(): Command {
     .option("--verbose", "Show detailed progress logs")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
-    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--use-foundry", "Use Azure Foundry API")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .option("--use-opencode", "Use OpenCode CLI")
     .option("--opencode-model <model-id>", "OpenCode model ID (default: github-copilot/claude-sonnet-4.6)")
+    .option("--prompt-file <path>", "Custom walkthrough prompt file")
     .action(async (prUrl: string | undefined, options) => {
       if (!prUrl) {
         program.help();
@@ -235,10 +232,11 @@ function buildProgram(): Command {
     .argument("<session-id>", "Session ID to resume")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
-    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--use-foundry", "Use Azure Foundry API")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .option("--use-opencode", "Use OpenCode CLI")
     .option("--opencode-model <model-id>", "OpenCode model ID (default: github-copilot/claude-sonnet-4.6)")
+    .option("--prompt-file <path>", "Custom walkthrough prompt file")
     .action(async (sessionId: string, options) => {
       const session = loadSession(sessionId);
       if (session.mode !== "walkthrough") {
@@ -257,7 +255,7 @@ function buildProgram(): Command {
     .option("--model <preset>", "Stored model label for the review session", "haiku")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
-    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--use-foundry", "Use Azure Foundry API")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .option("--use-opencode", "Use OpenCode CLI")
     .option("--opencode-model <model-id>", "OpenCode model ID (default: github-copilot/claude-sonnet-4.6)")
@@ -278,7 +276,7 @@ function buildProgram(): Command {
     .option("--verbose", "Show detailed progress logs")
     .option("--prompt-for-github-token", "Prompt for GitHub token if env var is unset")
     .option("--prompt-for-azure-key", "Prompt for Azure key if env var is unset")
-    .option("--use-foundry", "Use Azure Foundry API instead of local Claude Code CLI")
+    .option("--use-foundry", "Use Azure Foundry API")
     .option("--claude-model <model-id>", "Claude model ID (default: claude-sonnet-4-6)", "claude-sonnet-4-6")
     .option("--use-codex", "Use Codex CLI instead of Claude CLI")
     .option("--codex-model <model-id>", "Codex model ID")
