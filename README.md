@@ -1,12 +1,12 @@
 # gh-pr-agent
 
-A local CLI and web UI for reviewing GitHub pull requests with AI. Supports Codex CLI, Claude CLI, and Azure Foundry as backends.
+A local CLI and web UI for reviewing GitHub pull requests with AI. Supports Codex CLI, Claude CLI, OpenCode CLI, and Azure Foundry as backends.
 
 ## Requirements
 
 - Node.js 22 LTS or 24 LTS
 - A GitHub PAT with `Contents: Read` and `Pull Requests: Read` (add `Write` if you plan to post comments) access to the target repository
-- At least one AI backend: [Codex CLI](https://github.com/openai/codex) (default), [Claude CLI](https://github.com/anthropics/claude-code), or Azure Foundry. *(If using a CLI backend, ensure it is installed and authenticated in your terminal first).*
+- At least one AI backend: [Codex CLI](https://github.com/openai/codex) (default), [Claude CLI](https://github.com/anthropics/claude-code), [OpenCode CLI](https://opencode.ai/) with GitHub Copilot, or Azure Foundry. *(If using a CLI backend, ensure it is installed and authenticated in your terminal first).*
 
 ## Setup
 
@@ -42,6 +42,13 @@ Non-interactive. Generates a PR summary and optionally posts inline comments to 
 gh-pr-review summary https://github.com/OWNER/REPO/pull/123
 ```
 
+Use OpenCode with GitHub Copilot:
+
+```bash
+opencode auth login   # select GitHub Copilot first
+gh-pr-review summary --use-opencode --opencode-model github-copilot/claude-sonnet-4.6 https://github.com/OWNER/REPO/pull/123
+```
+
 ### Web UI
 
 Opens a local review UI in the browser — split diff, draft inline comments, AI review, one-click GitHub submission.
@@ -61,6 +68,8 @@ Session data is stored under `.gh-pr-agent/sessions/` and pruned automatically (
 | `--claude-model <model-id>` | Claude model ID when using Claude CLI (default: `claude-sonnet-4-6`) |
 | `--use-codex` | Use Codex CLI instead of Claude CLI (`summary` command only) |
 | `--codex-model <model-id>` | Codex model ID when using `--use-codex` |
+| `--use-opencode` | Use OpenCode CLI instead of Claude CLI |
+| `--opencode-model <model-id>` | OpenCode model ID when using `--use-opencode` (default: `github-copilot/claude-sonnet-4.6`) |
 | `--use-foundry` | Use Azure Foundry instead of local CLI |
 | `--prompt-file <path>` | Custom prompt file (walkthrough only) |
 | `--prompt-for-github-token` | Prompt for GitHub token if env var is unset |
@@ -78,6 +87,8 @@ Set in `.env` (auto-loaded at startup):
 | `AZURE_FOUNDRY_API_KEY` | Azure Foundry backend only |
 | `AZURE_FOUNDRY_HAIKU_DEPLOYMENT` | Azure Foundry + haiku model |
 | `AZURE_FOUNDRY_SONNET_DEPLOYMENT` | Azure Foundry + sonnet model |
+| `USE_OPENCODE` | Optional for `npm run dev`. Set to `1` to use OpenCode CLI in the dev UI API server |
+| `OPENCODE_MODEL` | Optional OpenCode model override for `npm run dev` |
 | `TOTAL_PATCH_BUDGET` | Optional. Max diff characters sent to AI for PR-wide review/summary prompts. Default: `200000` |
 
 `TOTAL_PATCH_BUDGET` is a character budget, not a token budget. Raising it can reduce prompt truncation on large PRs, but increases prompt size, latency, and model cost.

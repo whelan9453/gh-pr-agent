@@ -34,9 +34,10 @@ const annotationChatSchema = z.object({
 });
 
 const settingsUpdateSchema = z.object({
-  backend: z.enum(["claude-cli", "codex-cli", "foundry"]).optional(),
+  backend: z.enum(["claude-cli", "codex-cli", "opencode-cli", "foundry"]).optional(),
   claudeCliModel: z.string().min(1).optional(),
-  codexCliModel: z.string().optional()
+  codexCliModel: z.string().optional(),
+  opencodeCliModel: z.string().min(1).optional()
 });
 
 export function registerApiRoutes(app: Express, service: UiServerService): void {
@@ -51,6 +52,7 @@ export function registerApiRoutes(app: Express, service: UiServerService): void 
       if (raw.backend !== undefined) payload.backend = raw.backend;
       if (raw.claudeCliModel !== undefined) payload.claudeCliModel = raw.claudeCliModel;
       if (raw.codexCliModel !== undefined) payload.codexCliModel = raw.codexCliModel;
+      if (raw.opencodeCliModel !== undefined) payload.opencodeCliModel = raw.opencodeCliModel;
       service.updateSettings(payload);
       res.json(service.getSettings());
     } catch (error) {

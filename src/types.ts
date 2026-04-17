@@ -48,6 +48,7 @@ export interface AppConfig {
   backend?: ClientBackend;
   claudeCliModel?: string;
   codexCliModel?: string;
+  opencodeCliModel?: string;
 }
 
 // ── Interactive session types ─────────────────────────────────────────────

@@ -6,6 +6,7 @@ export interface BackendSettings {
   backend: ClientBackend;
   claudeCliModel: string;
   codexCliModel: string;
+  opencodeCliModel: string;
 }
 
 export interface UiServerService {

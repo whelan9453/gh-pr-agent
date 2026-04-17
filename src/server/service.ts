@@ -19,6 +19,7 @@ import type { BackendSettings, UiServerService } from "./types.js";
 
 function getBackendLabel(backend: BackendSettings["backend"]): string {
   if (backend === "codex-cli") return "Codex CLI";
+  if (backend === "opencode-cli") return "OpenCode CLI";
   if (backend === "claude-cli") return "Claude CLI";
   return "Azure Foundry";
 }
@@ -27,7 +28,8 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
   let settings: BackendSettings = {
     backend: config.backend ?? "codex-cli",
     claudeCliModel: config.claudeCliModel ?? "claude-sonnet-4-6",
-    codexCliModel: config.codexCliModel ?? ""
+    codexCliModel: config.codexCliModel ?? "",
+    opencodeCliModel: config.opencodeCliModel ?? "github-copilot/claude-sonnet-4.6"
   };
 
   let cachedClient = makeConversationClient({
@@ -36,7 +38,8 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
     azureFoundryApiKey: config.azureFoundryApiKey,
     deploymentName: config.deploymentName,
     claudeCliModel: settings.claudeCliModel,
-    codexCliModel: settings.codexCliModel
+    codexCliModel: settings.codexCliModel,
+    opencodeCliModel: settings.opencodeCliModel
   });
 
   const getClient = () => cachedClient;
@@ -79,7 +82,8 @@ export function createDefaultUiServerService(config: AppConfig): UiServerService
         azureFoundryApiKey: config.azureFoundryApiKey,
         deploymentName: config.deploymentName,
         claudeCliModel: settings.claudeCliModel,
-        codexCliModel: settings.codexCliModel
+        codexCliModel: settings.codexCliModel,
+        opencodeCliModel: settings.opencodeCliModel
       });
     }
   };

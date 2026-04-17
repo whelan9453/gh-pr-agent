@@ -137,7 +137,12 @@ describe("createUiApp", () => {
       runAiReview: vi.fn().mockResolvedValue({ analysis: "LGTM", draftCount: 0, comments: [] }),
       sendAnnotationChat: vi.fn().mockResolvedValue({ reply: "ok" }),
       sendChatMessage: vi.fn().mockResolvedValue({ reply: "ok" }),
-      getSettings: vi.fn().mockReturnValue({ backend: "claude-cli", claudeCliModel: "claude-sonnet-4-6", codexCliModel: "" }),
+      getSettings: vi.fn().mockReturnValue({
+        backend: "claude-cli",
+        claudeCliModel: "claude-sonnet-4-6",
+        codexCliModel: "",
+        opencodeCliModel: "github-copilot/claude-sonnet-4.6"
+      }),
       updateSettings: vi.fn()
     };
     const app = createUiApp({ service, staticDir: makeStaticDir() });

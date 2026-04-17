@@ -106,7 +106,8 @@ export default function App(): JSX.Element {
   const [backendSettings, setBackendSettings] = useState<BackendSettings>({
     backend: "codex-cli",
     claudeCliModel: "claude-sonnet-4-6",
-    codexCliModel: ""
+    codexCliModel: "",
+    opencodeCliModel: "github-copilot/claude-sonnet-4.6"
   });
   const [sendingChat, setSendingChat] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -288,7 +289,7 @@ export default function App(): JSX.Element {
   }
 
   function handleBackendSettingsChange(partial: Partial<BackendSettings>): void {
-    if ("claudeCliModel" in partial || "codexCliModel" in partial) {
+    if ("claudeCliModel" in partial || "codexCliModel" in partial || "opencodeCliModel" in partial) {
       setBackendSettings((prev) => ({ ...prev, ...partial }));
       if (pendingModelUpdate.current !== null) clearTimeout(pendingModelUpdate.current);
       pendingModelUpdate.current = setTimeout(() => {
@@ -937,14 +938,24 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps): JSX.Element {
             <select
               value={props.backendSettings.backend}
               disabled={props.runningAiReview}
-              onChange={(e) => props.onBackendSettingsChange({ backend: e.target.value as "claude-cli" | "codex-cli" | "foundry" })}
+              onChange={(e) => props.onBackendSettingsChange({ backend: e.target.value as BackendSettings["backend"] })}
               style={{ fontSize: "0.75rem", padding: "2px 4px" }}
             >
               <option value="claude-cli">Claude CLI</option>
               <option value="codex-cli">Codex CLI</option>
+              <option value="opencode-cli">OpenCode CLI</option>
               <option value="foundry">Azure Foundry</option>
             </select>
           </div>
+          {props.backendSettings.backend === "opencode-cli" ? (
+            <input
+              value={props.backendSettings.opencodeCliModel}
+              disabled={props.runningAiReview}
+              onChange={(e) => props.onBackendSettingsChange({ opencodeCliModel: e.target.value })}
+              placeholder="github-copilot/claude-sonnet-4.6"
+              style={{ width: "100%", fontSize: "0.75rem", padding: "4px 6px", marginBottom: "8px" }}
+            />
+          ) : null}
           <button
             type="button"
             disabled={props.runningAiReview}

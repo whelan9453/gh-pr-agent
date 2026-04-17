@@ -21,6 +21,8 @@ const githubToken = process.env.GITHUB_TOKEN?.trim();
 const azureFoundryApiKey = process.env.AZURE_FOUNDRY_API_KEY?.trim();
 const model = (process.env.MODEL_PRESET ?? "haiku") as ModelPreset;
 const claudeModel = process.env.CLAUDE_MODEL?.trim();
+const opencodeModel = process.env.OPENCODE_MODEL?.trim();
+const useOpencode = process.env.USE_OPENCODE === "1";
 
 if (!githubToken) {
   process.stderr.write("GITHUB_TOKEN is not set in .env\n");
@@ -32,12 +34,32 @@ if (azureFoundryApiKey) {
   try {
     config = resolveConfig({ model, githubToken, azureFoundryApiKey });
   } catch {
-    process.stderr.write("Azure Foundry config incomplete — falling back to Claude Code CLI\n");
-    config = buildClaudeCliConfig(githubToken, model, claudeModel);
+    process.stderr.write(`Azure Foundry config incomplete — falling back to ${useOpencode ? "OpenCode CLI" : "Claude Code CLI"}\n`);
+    config = useOpencode
+      ? {
+          githubToken,
+          azureFoundryBaseUrl: "",
+          azureFoundryApiKey: "",
+          selectedModel: model,
+          deploymentName: "",
+          backend: "opencode-cli",
+          ...(opencodeModel ? { opencodeCliModel: opencodeModel } : {})
+        }
+      : buildClaudeCliConfig(githubToken, model, claudeModel);
   }
 } else {
-  process.stderr.write("AZURE_FOUNDRY_API_KEY not set — using Claude Code CLI\n");
-  config = buildClaudeCliConfig(githubToken, model, claudeModel);
+  process.stderr.write(`AZURE_FOUNDRY_API_KEY not set — using ${useOpencode ? "OpenCode CLI" : "Claude Code CLI"}\n`);
+  config = useOpencode
+    ? {
+        githubToken,
+        azureFoundryBaseUrl: "",
+        azureFoundryApiKey: "",
+        selectedModel: model,
+        deploymentName: "",
+        backend: "opencode-cli",
+        ...(opencodeModel ? { opencodeCliModel: opencodeModel } : {})
+      }
+    : buildClaudeCliConfig(githubToken, model, claudeModel);
 }
 const service = createDefaultUiServerService(config);
 const app = express();

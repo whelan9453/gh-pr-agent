@@ -34,6 +34,7 @@ export interface InteractiveOptions {
   backend?: ClientBackend;
   claudeCliModel?: string;
   codexCliModel?: string;
+  opencodeCliModel?: string;
   promptFile?: string;
   verbose?: boolean;
 }
@@ -303,6 +304,8 @@ export async function runSessionRepl(
     azureFoundryApiKey: opts.azureFoundryApiKey,
     deploymentName: opts.deploymentName,
     ...(opts.claudeCliModel !== undefined ? { claudeCliModel: opts.claudeCliModel } : {}),
+    ...(opts.codexCliModel !== undefined ? { codexCliModel: opts.codexCliModel } : {}),
+    ...(opts.opencodeCliModel !== undefined ? { opencodeCliModel: opts.opencodeCliModel } : {}),
   });
 
   // Load prompt for system prompt
